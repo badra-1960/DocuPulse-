@@ -1,0 +1,8 @@
+{
+  "name": "DocuPulse - All-in-One PDF & Image SaaS Platform",
+  "description": "Professional SaaS suite for PDF and image conversion, compression, merging, splitting, OCR, and document workflows with usage quotas, subscriptions, user dashboard, and admin panel.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
