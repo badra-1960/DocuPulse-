@@ -1,6 +1,7 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { TOOLS_LIST } from '../../data/toolsData';
+import { LanguageSelector } from './LanguageSelector';
 import {
   Zap,
   ShieldCheck,
@@ -13,7 +14,13 @@ import {
 } from 'lucide-react';
 
 export const Footer: React.FC = () => {
-  const { openTool, setCurrentView, setIsUpgradeModalOpen } = useApp();
+  const { openTool, setCurrentView, setIsUpgradeModalOpen, t } = useApp();
+
+  const getLocalizedToolName = (tool: (typeof TOOLS_LIST)[0]) => {
+    const key = `tool_${tool.id.replace(/-/g, '_')}_name`;
+    const loc = t(key);
+    return loc !== key ? loc : tool.name;
+  };
 
   return (
     <footer className="w-full border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 text-slate-600 dark:text-slate-400 transition-colors">
@@ -26,10 +33,10 @@ export const Footer: React.FC = () => {
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                256-Bit SSL End-to-End Privacy
+                {t('footer_security_title')}
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                All client-side operations run locally in your browser. Cloud processing uses encrypted, ephemeral isolated sandbox memory.
+                {t('footer_security_desc')}
               </p>
             </div>
           </div>
@@ -40,10 +47,10 @@ export const Footer: React.FC = () => {
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                Automated 1-Hour File Purge
+                {t('footer_purge_title')}
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Files are strictly never stored permanently or sold. All temporary caches are completely wiped after 60 minutes.
+                {t('footer_purge_desc')}
               </p>
             </div>
           </div>
@@ -54,10 +61,10 @@ export const Footer: React.FC = () => {
             </div>
             <div>
               <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                GDPR, HIPAA & ISO Compliant
+                {t('footer_compliance_title')}
               </h4>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
-                Strict data compliance frameworks engineered for legal, healthcare, accounting, and enterprise teams worldwide.
+                {t('footer_compliance_desc')}
               </p>
             </div>
           </div>
@@ -76,16 +83,16 @@ export const Footer: React.FC = () => {
                 </div>
               </div>
               <span className="font-extrabold text-lg tracking-tight text-slate-900 dark:text-white">
-                DocuPulse SaaS
+                {t('app_name')}
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed max-w-sm">
-              The high-performance online workspace for PDF and image manipulation, intelligent OCR extraction, document compression, and format conversions. Fast, secure, and built for modern teams.
+              {t('footer_brand_desc')}
             </p>
             <div className="flex items-center gap-3 text-xs text-slate-500">
               <span className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                All Systems Operational (99.99%)
+                {t('footer_systems_operational')}
               </span>
             </div>
           </div>
@@ -93,7 +100,7 @@ export const Footer: React.FC = () => {
           {/* PDF Core Tools */}
           <div>
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">
-              PDF Core Tools
+              {t('cat_pdf')}
             </h5>
             <ul className="space-y-2 text-xs">
               {TOOLS_LIST.filter(t => t.category === 'pdf').map(t => (
@@ -102,7 +109,7 @@ export const Footer: React.FC = () => {
                     onClick={() => openTool(t.id)}
                     className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-left cursor-pointer"
                   >
-                    {t.name}
+                    {getLocalizedToolName(t)}
                   </button>
                 </li>
               ))}
@@ -112,7 +119,7 @@ export const Footer: React.FC = () => {
           {/* Conversion & Images */}
           <div>
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">
-              Converters & Studio
+              {t('nav_convert')} & {t('cat_image')}
             </h5>
             <ul className="space-y-2 text-xs">
               {TOOLS_LIST.filter(t => t.category === 'convert' || t.category === 'image').map(t => (
@@ -121,7 +128,7 @@ export const Footer: React.FC = () => {
                     onClick={() => openTool(t.id)}
                     className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors text-left cursor-pointer"
                   >
-                    {t.name}
+                    {getLocalizedToolName(t)}
                   </button>
                 </li>
               ))}
@@ -131,7 +138,7 @@ export const Footer: React.FC = () => {
           {/* Product & Solutions */}
           <div>
             <h5 className="text-xs font-bold uppercase tracking-wider text-slate-900 dark:text-white mb-3">
-              Platform & Legal
+              {t('footer_platform_legal')}
             </h5>
             <ul className="space-y-2 text-xs">
               <li>
@@ -139,7 +146,7 @@ export const Footer: React.FC = () => {
                   onClick={() => setCurrentView('pricing')}
                   className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                 >
-                  Pricing & Subscriptions
+                  {t('nav_pricing')}
                 </button>
               </li>
               <li>
@@ -147,7 +154,7 @@ export const Footer: React.FC = () => {
                   onClick={() => setCurrentView('dashboard')}
                   className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer"
                 >
-                  User Dashboard & Quota
+                  {t('nav_dashboard')}
                 </button>
               </li>
               <li>
@@ -156,17 +163,17 @@ export const Footer: React.FC = () => {
                   className="text-indigo-600 dark:text-indigo-400 font-bold hover:underline cursor-pointer flex items-center gap-1"
                 >
                   <Sparkles className="w-3 h-3 text-amber-400" />
-                  <span>Pro Plan ($9/mo)</span>
+                  <span>{t('plan_pro_name')} ($9/mo)</span>
                 </button>
               </li>
               <li>
                 <span className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer">
-                  Privacy Policy & Cookies
+                  {t('footer_privacy_policy')}
                 </span>
               </li>
               <li>
                 <span className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer">
-                  Terms of Service & SLA
+                  {t('footer_terms_service')}
                 </span>
               </li>
             </ul>
@@ -175,9 +182,12 @@ export const Footer: React.FC = () => {
 
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
-          <p>© 2026 DocuPulse SaaS Platform. All rights reserved.</p>
-          <div className="flex items-center gap-1">
-            <span>Built with precision for seamless productivity</span>
+          <p>© 2026 DocuPulse SaaS Platform. {t('footer_rights_reserved')}</p>
+          <div className="flex items-center gap-4">
+            <LanguageSelector variant="segmented" />
+            <div className="flex items-center gap-1">
+              <span>{t('footer_tagline')}</span>
+            </div>
           </div>
         </div>
       </div>

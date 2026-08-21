@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 export const LandingHero: React.FC = () => {
-  const { openTool, setIsUpgradeModalOpen, quota, user, systemSettings } = useApp();
+  const { openTool, setIsUpgradeModalOpen, quota, user, systemSettings, t } = useApp();
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -43,13 +43,16 @@ export const LandingHero: React.FC = () => {
     const name = file.name.toLowerCase();
     const type = file.type;
 
-    if (name.endsWith('.pdf') || type === 'application/pdf') {
-      // Default to compress or merge
-      openTool('compress-pdf');
+    if (name.endsWith('.xlsx') || name.endsWith('.xls') || name.endsWith('.csv')) {
+      openTool('excel-to-pdf');
+    } else if (name.endsWith('.pptx') || name.endsWith('.ppt')) {
+      openTool('ppt-to-pdf');
+    } else if (name.endsWith('.docx') || name.endsWith('.doc')) {
+      openTool('word-to-pdf');
     } else if (type.startsWith('image/')) {
       openTool('image-to-pdf');
-    } else if (name.endsWith('.docx') || name.endsWith('.doc') || name.endsWith('.txt')) {
-      openTool('word-to-pdf');
+    } else if (name.endsWith('.pdf') || type === 'application/pdf') {
+      openTool('pdf-to-excel');
     } else {
       openTool('merge-pdf');
     }
@@ -65,26 +68,26 @@ export const LandingHero: React.FC = () => {
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs mb-6 animate-in fade-in slide-in-from-bottom-3 duration-500">
           <span className="flex h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
           <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-            Next-Gen SaaS Document Suite
+            {t('hero_badge')}
           </span>
           <span className="text-slate-300 dark:text-slate-700">•</span>
           <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
             <Sparkles className="w-3.5 h-3.5" />
-            Gemini AI Integrated
+            {t('hero_ai_badge')}
           </span>
         </div>
 
         {/* Main Headline */}
         <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 dark:text-white max-w-4xl mx-auto leading-[1.15]">
-          Every tool you need to work with{' '}
+          {t('hero_headline_1')}{' '}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-600 via-violet-600 to-pink-600">
-            PDFs & Images
+            {t('hero_headline_gradient')}
           </span>{' '}
-          in one unified workspace.
+          {t('hero_headline_2')}
         </h1>
 
         <p className="mt-5 text-base sm:text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
-          Merge, split, compress, convert, OCR, watermark, and enhance your files with military-grade privacy and instantaneous processing speeds.
+          {t('hero_subtitle')}
         </p>
 
         {/* Smart Dropzone Hub */}
@@ -112,25 +115,36 @@ export const LandingHero: React.FC = () => {
             }`}
           >
             <div className="flex flex-col items-center justify-center text-center">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 mb-4 group-hover:scale-110 transition-transform">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-indigo-500 to-violet-600 flex items-center justify-center text-white shadow-lg shadow-indigo-500/25 mb-3 group-hover:scale-110 transition-transform">
                 <UploadCloud className="w-8 h-8" />
               </div>
+
+              {/* Explicit Action Label under the Icon */}
+              <div className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/80 dark:border-indigo-800/80 text-indigo-700 dark:text-indigo-300 font-extrabold text-xs sm:text-sm mb-2 shadow-2xs group-hover:bg-indigo-600 group-hover:text-white transition-all">
+                <span>{t('hero_action_upload_btn', undefined, 'Déposer vos fichiers ou commencer la conversion')}</span>
+              </div>
+
               <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white">
-                Drop your PDF or image here, or <span className="text-indigo-600 dark:text-indigo-400 underline decoration-indigo-400 decoration-2 underline-offset-4">browse files</span>
+                {t('hero_drop_title')}{' '}
+                <span className="text-indigo-600 dark:text-indigo-400 underline decoration-indigo-400 decoration-2 underline-offset-4">
+                  {t('hero_browse_files')}
+                </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1.5">
-                Supports PDF, DOCX, JPG, PNG, WebP, SVG, GIF up to 200MB
+                {t('hero_drop_subtitle')}
               </p>
 
               {/* Free Quotas Indicator within Hero */}
               <div className="mt-4 inline-flex items-center gap-2 px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-600 dark:text-slate-300">
                 <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
                 {isUnlimited ? (
-                  <span>Unlimited Pro Operations Active</span>
+                  <span>{t('hero_unlimited_active')}</span>
                 ) : (
-                  <span>
-                    <strong>{remainingOps} of {freeLimit}</strong> free daily operations remaining today
-                  </span>
+                  <span
+                    dangerouslySetInnerHTML={{
+                      __html: t('hero_free_remaining', { remaining: remainingOps, limit: freeLimit }),
+                    }}
+                  />
                 )}
               </div>
             </div>
@@ -140,13 +154,14 @@ export const LandingHero: React.FC = () => {
         {/* Quick Launch Buttons */}
         <div className="mt-8 flex flex-wrap items-center justify-center gap-2.5">
           <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mr-1">
-            Quick Launch:
+            {t('hero_quick_launch')}
           </span>
           {[
+            { id: 'pdf-to-excel', label: 'PDF to Excel', icon: <FileText className="w-3.5 h-3.5 text-emerald-500" /> },
+            { id: 'word-to-pdf', label: 'Word to PDF', icon: <FileText className="w-3.5 h-3.5 text-blue-500" /> },
             { id: 'merge-pdf', label: 'Merge PDF', icon: <Layers className="w-3.5 h-3.5 text-rose-500" /> },
             { id: 'compress-pdf', label: 'Compress PDF', icon: <Minimize2 className="w-3.5 h-3.5 text-emerald-500" /> },
             { id: 'image-to-pdf', label: 'Image to PDF', icon: <FileImage className="w-3.5 h-3.5 text-violet-500" /> },
-            { id: 'pdf-to-word', label: 'PDF to Word', icon: <FileText className="w-3.5 h-3.5 text-cyan-500" /> },
             { id: 'ai-ocr', label: 'AI OCR & Scan', icon: <Sparkles className="w-3.5 h-3.5 text-indigo-500" /> },
           ].map((item) => (
             <button
@@ -164,34 +179,34 @@ export const LandingHero: React.FC = () => {
         <div className="mt-14 pt-8 border-t border-slate-200/80 dark:border-slate-800/80 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
           <div>
             <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              10,480,000+
+              {t('hero_stat_docs_count')}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-              Documents Processed
+              {t('hero_stat_docs_label')}
             </p>
           </div>
           <div>
             <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              99.98%
+              {t('hero_stat_sla_count')}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-              Uptime & Accuracy SLA
+              {t('hero_stat_sla_label')}
             </p>
           </div>
           <div>
             <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              &lt; 1.2s
+              {t('hero_stat_speed_count')}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-              Average Latency Speed
+              {t('hero_stat_speed_label')}
             </p>
           </div>
           <div>
             <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              256-Bit
+              {t('hero_stat_security_count')}
             </p>
             <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
-              End-to-End Encryption
+              {t('hero_stat_security_label')}
             </p>
           </div>
         </div>

@@ -1,13 +1,18 @@
+export type Language = 'en' | 'fr' | 'es' | 'de';
+
 export type ToolCategory = 'pdf' | 'image' | 'ai' | 'security' | 'convert';
 
 export type ToolId =
   | 'merge-pdf'
   | 'split-pdf'
   | 'compress-pdf'
+  | 'pdf-to-excel'
+  | 'excel-to-pdf'
+  | 'word-to-pdf'
+  | 'ppt-to-pdf'
   | 'pdf-to-image'
   | 'image-to-pdf'
   | 'pdf-to-word'
-  | 'word-to-pdf'
   | 'image-converter'
   | 'ai-ocr'
   | 'watermark-pdf'

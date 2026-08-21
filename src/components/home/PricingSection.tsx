@@ -5,7 +5,7 @@ import { UserPlan } from '../../types';
 import { Check, Sparkles, Crown, Zap, Shield } from 'lucide-react';
 
 export const PricingSection: React.FC = () => {
-  const { user, setIsUpgradeModalOpen, setSelectedUpgradePlan } = useApp();
+  const { user, setIsUpgradeModalOpen, setSelectedUpgradePlan, t } = useApp();
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
 
   const handleSelectPlan = (planId: string) => {
@@ -14,6 +14,63 @@ export const PricingSection: React.FC = () => {
     setIsUpgradeModalOpen(true);
   };
 
+  const getLocalizedPlan = (plan: (typeof PRICING_PLANS)[0]) => {
+    if (plan.id === 'free') {
+      return {
+        ...plan,
+        name: t('plan_free_name'),
+        badge: t('plan_free_badge'),
+        description: t('plan_free_desc'),
+        limitText: t('plan_free_limit'),
+        cta: t('plan_free_cta'),
+        features: [
+          t('plan_free_f1'),
+          t('plan_free_f2'),
+          t('plan_free_f3'),
+          t('plan_free_f4'),
+          t('plan_free_f5'),
+        ],
+      };
+    }
+    if (plan.id === 'pro') {
+      return {
+        ...plan,
+        name: t('plan_pro_name'),
+        badge: t('plan_pro_badge'),
+        description: t('plan_pro_desc'),
+        limitText: t('plan_pro_limit'),
+        cta: t('plan_pro_cta'),
+        features: [
+          t('plan_pro_f1'),
+          t('plan_pro_f2'),
+          t('plan_pro_f3'),
+          t('plan_pro_f4'),
+          t('plan_pro_f5'),
+        ],
+      };
+    }
+    if (plan.id === 'business') {
+      return {
+        ...plan,
+        name: t('plan_biz_name'),
+        badge: t('plan_biz_badge'),
+        description: t('plan_biz_desc'),
+        limitText: t('plan_biz_limit'),
+        cta: t('plan_biz_cta'),
+        features: [
+          t('plan_biz_f1'),
+          t('plan_biz_f2'),
+          t('plan_biz_f3'),
+          t('plan_biz_f4'),
+          t('plan_biz_f5'),
+        ],
+      };
+    }
+    return plan;
+  };
+
+  const localizedPlans = PRICING_PLANS.map(getLocalizedPlan);
+
   return (
     <section className="py-16 md:py-24 bg-slate-50 dark:bg-slate-900/50 border-t border-slate-200/80 dark:border-slate-800/80 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -21,13 +78,13 @@ export const PricingSection: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-12">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold mb-3 border border-indigo-200/60 dark:border-indigo-800/60">
             <Crown className="w-3.5 h-3.5 text-amber-500" />
-            <span>Transparent, Scalable SaaS Pricing</span>
+            <span>{t('pricing_badge')}</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Simple plans for individuals and enterprise teams
+            {t('pricing_title')}
           </h2>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-2.5">
-            Use any tool 3 times per day for free. Upgrade anytime for unlimited access, higher file limits, and batch workflows.
+            {t('pricing_subtitle')}
           </p>
 
           {/* Monthly / Annual switch */}
@@ -40,7 +97,7 @@ export const PricingSection: React.FC = () => {
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              Monthly Billing
+              {t('pricing_monthly_billing')}
             </button>
             <button
               onClick={() => setBillingCycle('annual')}
@@ -50,9 +107,9 @@ export const PricingSection: React.FC = () => {
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
               }`}
             >
-              <span>Annual Billing</span>
+              <span>{t('pricing_annual_billing')}</span>
               <span className="text-[10px] font-extrabold bg-amber-400 text-slate-950 px-1.5 py-0.2 rounded-full">
-                SAVE 22%
+                {t('pricing_save_22')}
               </span>
             </button>
           </div>
@@ -60,7 +117,7 @@ export const PricingSection: React.FC = () => {
 
         {/* Pricing Cards Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-stretch">
-          {PRICING_PLANS.map((plan) => {
+          {localizedPlans.map((plan) => {
             const isCurrentPlan = user.plan === plan.id;
             const price = billingCycle === 'annual' ? (plan.annualPrice / 12).toFixed(2) : plan.monthlyPrice.toFixed(2);
 
@@ -87,7 +144,7 @@ export const PricingSection: React.FC = () => {
                     </h3>
                     {isCurrentPlan && (
                       <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
-                        Active Plan
+                        {t('pricing_active_plan')}
                       </span>
                     )}
                   </div>
@@ -103,12 +160,15 @@ export const PricingSection: React.FC = () => {
                         ${price}
                       </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 font-medium">
-                        / month
+                        {t('pricing_per_month')}
                       </span>
                     </div>
                     {billingCycle === 'annual' && plan.annualPrice > 0 && (
                       <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-bold mt-1">
-                        Billed annually at ${plan.annualPrice}/yr (Save ${(plan.monthlyPrice * 12 - plan.annualPrice).toFixed(0)})
+                        {t('pricing_billed_annually', {
+                          annualPrice: plan.annualPrice,
+                          savings: (plan.monthlyPrice * 12 - plan.annualPrice).toFixed(0),
+                        })}
                       </p>
                     )}
                     <div className="mt-2 text-xs font-bold text-indigo-600 dark:text-indigo-400">
@@ -119,7 +179,7 @@ export const PricingSection: React.FC = () => {
                   {/* Feature checklist */}
                   <div className="space-y-3">
                     <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                      Included Capabilities:
+                      {t('pricing_included_caps')}
                     </p>
                     {plan.features.map((feat, idx) => (
                       <div key={idx} className="flex items-start gap-2.5 text-xs text-slate-700 dark:text-slate-300">
@@ -137,7 +197,7 @@ export const PricingSection: React.FC = () => {
                       disabled
                       className="w-full py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-xs font-bold text-center cursor-default"
                     >
-                      Currently Active
+                      {t('pricing_currently_active')}
                     </button>
                   ) : (
                     <button

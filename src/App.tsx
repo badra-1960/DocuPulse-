@@ -8,6 +8,7 @@ import { AppProvider, useApp } from './context/AppContext';
 import { Header } from './components/common/Header';
 import { Footer } from './components/common/Footer';
 import { LandingHero } from './components/home/LandingHero';
+import { PdfConversionSection } from './components/home/PdfConversionSection';
 import { ToolGrid } from './components/home/ToolGrid';
 import { PricingSection } from './components/home/PricingSection';
 import { FeatureHighlights } from './components/home/FeatureHighlights';
@@ -31,6 +32,7 @@ const MainContent: React.FC = () => {
         {currentView === 'home' && (
           <>
             <LandingHero />
+            <PdfConversionSection />
             <ToolGrid />
             <FeatureHighlights />
             <PricingSection />

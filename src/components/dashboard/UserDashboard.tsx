@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
   LayoutDashboard,
@@ -17,6 +17,10 @@ import {
   ArrowUpRight,
   RefreshCw,
   ExternalLink,
+  UserCheck,
+  Building2,
+  ShieldAlert,
+  LogIn,
 } from 'lucide-react';
 
 export const UserDashboard: React.FC = () => {
@@ -25,6 +29,7 @@ export const UserDashboard: React.FC = () => {
     setUser,
     quota,
     history,
+    invoices,
     deleteHistoryItem,
     clearHistory,
     setIsUpgradeModalOpen,
@@ -32,11 +37,22 @@ export const UserDashboard: React.FC = () => {
     openTool,
     showToast,
     systemSettings,
+    resetDailyQuota,
+    loginAs,
+    setIsAuthModalOpen,
+    setAuthModalTab,
+    t,
   } = useApp();
 
   const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'billing' | 'settings'>('overview');
   const [profileName, setProfileName] = useState(user.name);
   const [profileEmail, setProfileEmail] = useState(user.email);
+
+  // Sync profile fields whenever the active user changes (fixing account switching sync)
+  useEffect(() => {
+    setProfileName(user.name);
+    setProfileEmail(user.email);
+  }, [user.name, user.email, user.id]);
 
   const isUnlimited = user.plan === 'pro' || user.plan === 'business' || user.role === 'admin';
   const freeLimit = systemSettings.freeDailyLimit || 3;
@@ -44,7 +60,7 @@ export const UserDashboard: React.FC = () => {
 
   const handleUpdateProfile = (e: React.FormEvent) => {
     e.preventDefault();
-    setUser({ ...user, name: profileName, email: profileEmail });
+    setUser((prev) => ({ ...prev, name: profileName, email: profileEmail }));
     showToast('success', 'Profile Updated', 'Your profile details have been saved.');
   };
 
@@ -68,7 +84,7 @@ export const UserDashboard: React.FC = () => {
                       ? 'bg-amber-400 text-slate-950'
                       : 'bg-slate-800 text-slate-300 border border-slate-700'
                   }`}>
-                    {user.plan.toUpperCase()} PLAN
+                    {t('dash_plan_badge', { plan: user.plan.toUpperCase() })}
                   </span>
                 </div>
                 <p className="text-xs text-slate-300 mt-1">{user.email}</p>
@@ -83,12 +99,12 @@ export const UserDashboard: React.FC = () => {
                   className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-300 hover:to-amber-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-amber-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
                 >
                   <Crown className="w-4 h-4" />
-                  <span>Upgrade to Pro ($9/mo)</span>
+                  <span>{t('dash_upgrade_btn')}</span>
                 </button>
               ) : (
                 <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold">
                   <CheckCircle className="w-4 h-4 text-emerald-400" />
-                  <span>Pro Subscription Active</span>
+                  <span>{t('dash_active_sub')}</span>
                 </div>
               )}
             </div>
@@ -98,10 +114,10 @@ export const UserDashboard: React.FC = () => {
         {/* Navigation Tabs */}
         <div className="flex items-center gap-2 mb-8 border-b border-slate-200 dark:border-slate-800 pb-2">
           {[
-            { id: 'overview', label: 'Overview & Quota', icon: LayoutDashboard },
-            { id: 'history', label: `Activity History (${history.length})`, icon: Clock },
-            { id: 'billing', label: 'Subscription & Billing', icon: CreditCard },
-            { id: 'settings', label: 'Account Settings', icon: Settings },
+            { id: 'overview', label: t('dash_tab_overview'), icon: LayoutDashboard },
+            { id: 'history', label: t('dash_tab_history', { count: history.length }), icon: Clock },
+            { id: 'billing', label: t('dash_tab_billing'), icon: CreditCard },
+            { id: 'settings', label: t('dash_tab_settings'), icon: Settings },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -131,7 +147,7 @@ export const UserDashboard: React.FC = () => {
               <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Daily Operation Quota
+                    {t('dash_daily_usage')}
                   </span>
                   <Zap className="w-4 h-4 text-amber-500" />
                 </div>
@@ -140,7 +156,7 @@ export const UserDashboard: React.FC = () => {
                     {isUnlimited ? '∞' : `${quota.usedToday} / ${freeLimit}`}
                   </span>
                   <span className="text-xs text-slate-500">
-                    {isUnlimited ? 'Unlimited Operations' : 'operations used today'}
+                    {isUnlimited ? t('nav_unlimited') : t('dash_used_of', { used: quota.usedToday, limit: freeLimit })}
                   </span>
                 </div>
 
@@ -155,8 +171,10 @@ export const UserDashboard: React.FC = () => {
                       />
                     </div>
                     <div className="flex items-center justify-between text-[11px] text-slate-400 mt-2">
-                      <span>Resets daily at 00:00 UTC</span>
-                      <span>{Math.max(0, freeLimit - quota.usedToday)} remaining</span>
+                      <span>{t('dash_resets_midnight')}</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {Math.max(0, freeLimit - quota.usedToday)} free uses remaining today
+                      </span>
                     </div>
                   </div>
                 )}
@@ -166,7 +184,7 @@ export const UserDashboard: React.FC = () => {
               <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Lifetime Processed
+                    {t('dash_total_conversions')}
                   </span>
                   <FileText className="w-4 h-4 text-indigo-500" />
                 </div>
@@ -174,10 +192,10 @@ export const UserDashboard: React.FC = () => {
                   <span className="text-3xl font-extrabold text-slate-900 dark:text-white">
                     {history.length}
                   </span>
-                  <span className="text-xs text-slate-500">files & conversions</span>
+                  <span className="text-xs text-slate-500">{t('conv_file_plural')}</span>
                 </div>
                 <p className="text-xs text-slate-400 mt-4">
-                  Stored securely in your local browser sandbox cache.
+                  {t('footer_ssl_desc')}
                 </p>
               </div>
 
@@ -185,7 +203,7 @@ export const UserDashboard: React.FC = () => {
               <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
                 <div className="flex items-center justify-between mb-3">
                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Privacy Protection
+                    {t('footer_ssl_title')}
                   </span>
                   <ShieldCheck className="w-4 h-4 text-emerald-500" />
                 </div>
@@ -195,7 +213,7 @@ export const UserDashboard: React.FC = () => {
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-4">
-                  Ephemeral isolated RAM cache with 60-min automatic destruction.
+                  {t('footer_purge_desc')}
                 </p>
               </div>
             </div>
@@ -204,25 +222,25 @@ export const UserDashboard: React.FC = () => {
             <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                  Recent Document Conversions
+                  {t('dash_tab_history', { count: history.length })}
                 </h3>
                 <button
                   onClick={() => setActiveTab('history')}
                   className="text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer flex items-center gap-1"
                 >
-                  <span>View All History</span>
+                  <span>{t('dash_tab_history', { count: '' })}</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </button>
               </div>
 
               {history.length === 0 ? (
                 <div className="py-12 text-center text-slate-400">
-                  <p className="text-xs">No documents processed yet.</p>
+                  <p className="text-xs">{t('dash_history_empty')}</p>
                   <button
                     onClick={() => openTool('merge-pdf')}
                     className="mt-3 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold cursor-pointer"
                   >
-                    Start Processing Now
+                    {t('hero_browse_files')}
                   </button>
                 </div>
               ) : (
@@ -253,7 +271,7 @@ export const UserDashboard: React.FC = () => {
                           className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:text-indigo-600 flex items-center gap-1.5 shrink-0"
                         >
                           <Download className="w-3.5 h-3.5" />
-                          <span>Download</span>
+                          <span>{t('workspace_download_button')}</span>
                         </a>
                       )}
                     </div>
@@ -357,7 +375,7 @@ export const UserDashboard: React.FC = () => {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-100 dark:border-slate-800">
                 <div>
                   <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                    Current Active Tier
+                    {t('dash_current_tier')}
                   </span>
                   <h3 className="text-2xl font-extrabold text-slate-900 dark:text-white capitalize mt-1">
                     {user.plan} Plan
@@ -375,41 +393,38 @@ export const UserDashboard: React.FC = () => {
                       onClick={() => setIsUpgradeModalOpen(true)}
                       className="px-6 py-3 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-extrabold text-xs shadow-lg shadow-indigo-500/20 cursor-pointer transition-all"
                     >
-                      Upgrade Plan ($9/mo)
+                      {t('dash_upgrade_btn')}
                     </button>
                   ) : (
                     <button
                       onClick={cancelSubscription}
                       className="px-4 py-2.5 rounded-xl border border-rose-300 dark:border-rose-800 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950 text-xs font-bold cursor-pointer transition-colors"
                     >
-                      Cancel Subscription
+                      {t('dash_cancel_sub')}
                     </button>
                   )}
                 </div>
               </div>
 
-              {/* Billing History Mock Invoices */}
+              {/* Billing History Invoices */}
               <div className="pt-6">
                 <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-4">
-                  Billing & Invoice History
+                  Billing & Invoice History ({invoices.length})
                 </h4>
                 <div className="space-y-2">
-                  {[
-                    { id: 'INV-2026-001', date: 'Feb 15, 2026', amount: '$9.00', status: 'Paid', plan: 'DocuPulse Pro Monthly' },
-                    { id: 'INV-2026-000', date: 'Jan 15, 2026', amount: '$9.00', status: 'Paid', plan: 'DocuPulse Pro Monthly' },
-                  ].map((inv) => (
+                  {invoices.map((inv) => (
                     <div
                       key={inv.id}
                       className="flex items-center justify-between p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-700/60"
                     >
                       <div>
                         <p className="text-xs font-bold text-slate-900 dark:text-white">
-                          {inv.plan} ({inv.id})
+                          {inv.plan} ({inv.invoiceNumber})
                         </p>
-                        <p className="text-[11px] text-slate-400">{inv.date}</p>
+                        <p className="text-[11px] text-slate-400">{inv.date} • {inv.paymentMethod}</p>
                       </div>
                       <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white">{inv.amount}</span>
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">${inv.amount.toFixed(2)}</span>
                         <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300">
                           {inv.status}
                         </span>
@@ -424,45 +439,172 @@ export const UserDashboard: React.FC = () => {
 
         {/* Tab 4: Account Settings */}
         {activeTab === 'settings' && (
-          <div className="max-w-2xl p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
-            <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4">
-              Profile & Preferences
-            </h2>
-
-            <form onSubmit={handleUpdateProfile} className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Full Name
-                </label>
-                <input
-                  type="text"
-                  value={profileName}
-                  onChange={(e) => setProfileName(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
-                />
+          <div className="space-y-6 max-w-3xl">
+            {/* Account Fast Switcher Module */}
+            <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                  {t('dash_switch_account_title')}
+                </h2>
+                <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/50 px-2.5 py-1 rounded-full">
+                  Active: {user.name} ({user.plan})
+                </span>
               </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
+                {t('dash_switch_account_desc')}
+              </p>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Address
-                </label>
-                <input
-                  type="email"
-                  value={profileEmail}
-                  onChange={(e) => setProfileEmail(e.target.value)}
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white"
-                />
-              </div>
-
-              <div className="pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
                 <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors cursor-pointer"
+                  type="button"
+                  onClick={() => loginAs('free')}
+                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3.5 ${
+                    user.plan === 'free' && user.role !== 'admin'
+                      ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50 dark:bg-slate-800/40'
+                  }`}
                 >
-                  Save Profile
+                  <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-300 shrink-0">
+                    AM
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">Alex Morgan</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">Free</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">alex.morgan@example.com (3 ops/day)</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => loginAs('pro')}
+                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3.5 ${
+                    user.plan === 'pro' && user.role !== 'admin'
+                      ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
+                    SC
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">Sarah Connor</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">Pro</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">sarah.connor@designstudio.io (Unlimited)</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => loginAs('business')}
+                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3.5 ${
+                    user.plan === 'business' && user.role !== 'admin'
+                      ? 'border-indigo-500 bg-indigo-50/70 dark:bg-indigo-950/40 ring-2 ring-indigo-500/20'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/60 flex items-center justify-center font-bold text-purple-700 dark:text-purple-300 shrink-0">
+                    DV
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">David Vance</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">Business</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Apex Digital Global Inc. (10 seats)</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => loginAs('admin')}
+                  className={`p-4 rounded-2xl border text-left transition-all cursor-pointer flex items-center gap-3.5 ${
+                    user.role === 'admin'
+                      ? 'border-rose-500 bg-rose-50/70 dark:bg-rose-950/40 ring-2 ring-rose-500/20'
+                      : 'border-slate-200 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700 bg-slate-50 dark:bg-slate-800/40'
+                  }`}
+                >
+                  <div className="w-10 h-10 rounded-xl bg-rose-100 dark:bg-rose-900/60 flex items-center justify-center font-bold text-rose-700 dark:text-rose-300 shrink-0">
+                    <ShieldAlert className="w-5 h-5 text-rose-600 dark:text-rose-400" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">Master Admin</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-rose-100 dark:bg-rose-950 text-rose-800 dark:text-rose-300">Staff</span>
+                    </div>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">admin@docupulse.io (Full Access)</p>
+                  </div>
                 </button>
               </div>
-            </form>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                <span className="text-xs text-slate-500">Need to log into a custom account?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthModalTab('login');
+                    setIsAuthModalOpen(true);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                >
+                  <LogIn className="w-3.5 h-3.5" />
+                  <span>Sign In Custom Account</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Profile Update Form */}
+            <div className="p-6 sm:p-8 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-xs">
+              <h2 className="text-base font-bold text-slate-900 dark:text-white mb-4">
+                {t('dash_profile_title')}
+              </h2>
+
+              <form onSubmit={handleUpdateProfile} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t('auth_full_name')}
+                  </label>
+                  <input
+                    type="text"
+                    value={profileName}
+                    onChange={(e) => setProfileName(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    {t('auth_email')}
+                  </label>
+                  <input
+                    type="email"
+                    value={profileEmail}
+                    onChange={(e) => setProfileEmail(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                  />
+                </div>
+
+                <div className="pt-2 flex items-center justify-between">
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold transition-colors cursor-pointer shadow-md shadow-indigo-500/20"
+                  >
+                    {t('dash_save_profile')}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={resetDailyQuota}
+                    className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                  >
+                    {t('dash_reset_quota_btn')}
+                  </button>
+                </div>
+              </form>
+            </div>
           </div>
         )}
       </div>

@@ -25,6 +25,7 @@ export const UpgradeModal: React.FC = () => {
     upgradeSubscription,
     user,
     quota,
+    t,
   } = useApp();
 
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'annual'>('annual');
@@ -92,14 +93,14 @@ export const UpgradeModal: React.FC = () => {
           <div>
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 text-xs font-bold mb-4">
               <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-              <span>Unlock Unlimited Power</span>
+              <span>{t('upgrade_modal_power')}</span>
             </div>
 
             <h3 className="text-2xl font-extrabold tracking-tight">
-              Upgrade to <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-300 via-violet-300 to-pink-300">DocuPulse Pro</span>
+              {t('upgrade_modal_title')}
             </h3>
             <p className="text-xs text-slate-300 mt-1.5 leading-relaxed">
-              Remove the 3-operations daily ceiling, enable batch processing up to 50 files, and unlock Gemini AI OCR intelligence.
+              {t('upgrade_modal_desc')}
             </p>
 
             {/* Plan selection buttons */}
@@ -113,7 +114,7 @@ export const UpgradeModal: React.FC = () => {
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                ⭐ Pro ($9/mo)
+                {t('upgrade_plan_pro_btn')}
               </button>
               <button
                 type="button"
@@ -124,19 +125,19 @@ export const UpgradeModal: React.FC = () => {
                     : 'text-slate-400 hover:text-white'
                 }`}
               >
-                🏢 Business ($24/mo)
+                {t('upgrade_plan_biz_btn')}
               </button>
             </div>
 
             {/* Feature List */}
             <div className="space-y-2.5 mt-6">
               {[
-                { text: 'Unlimited conversions & edits 24/7', icon: <InfinityIcon className="w-4 h-4 text-emerald-400" /> },
-                { text: 'Max 200MB file size (vs 15MB on Free)', icon: <Zap className="w-4 h-4 text-amber-400" /> },
-                { text: 'Simultaneous batch processing (50 files)', icon: <CheckCircle2 className="w-4 h-4 text-indigo-400" /> },
-                { text: 'Gemini AI OCR & Document Intelligence', icon: <Sparkles className="w-4 h-4 text-pink-400" /> },
-                { text: 'No queue priority server processing', icon: <Clock className="w-4 h-4 text-cyan-400" /> },
-                { text: '100% ad-free & zero watermark guarantee', icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
+                { text: t('upgrade_feat_1'), icon: <InfinityIcon className="w-4 h-4 text-emerald-400" /> },
+                { text: t('upgrade_feat_2'), icon: <Zap className="w-4 h-4 text-amber-400" /> },
+                { text: t('upgrade_feat_3'), icon: <CheckCircle2 className="w-4 h-4 text-indigo-400" /> },
+                { text: t('upgrade_feat_4'), icon: <Sparkles className="w-4 h-4 text-pink-400" /> },
+                { text: t('upgrade_feat_5'), icon: <Clock className="w-4 h-4 text-cyan-400" /> },
+                { text: t('upgrade_feat_6'), icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
               ].map((feat, idx) => (
                 <div key={idx} className="flex items-center gap-2.5 text-xs text-slate-200">
                   <div className="shrink-0">{feat.icon}</div>
@@ -149,9 +150,9 @@ export const UpgradeModal: React.FC = () => {
           <div className="mt-6 pt-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
               <Lock className="w-3.5 h-3.5 text-slate-400" />
-              <span>256-Bit SSL Encrypted Checkout</span>
+              <span>{t('upgrade_ssl_guarantee')}</span>
             </div>
-            <span>Cancel anytime</span>
+            <span>{t('upgrade_cancel_anytime')}</span>
           </div>
         </div>
 
@@ -161,7 +162,7 @@ export const UpgradeModal: React.FC = () => {
             {/* Billing Toggle (Monthly / Annual) */}
             <div className="flex items-center justify-between mb-5">
               <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Billing Cycle
+                {t('upgrade_billing_cycle')}
               </span>
               <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
                 <button
@@ -173,7 +174,7 @@ export const UpgradeModal: React.FC = () => {
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  Monthly
+                  {t('pricing_monthly')}
                 </button>
                 <button
                   type="button"
@@ -184,7 +185,7 @@ export const UpgradeModal: React.FC = () => {
                       : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
                   }`}
                 >
-                  <span>Annual</span>
+                  <span>{t('pricing_annual')}</span>
                   <span className="text-[9px] font-extrabold bg-amber-400 text-slate-950 px-1 rounded-full">
                     -22%
                   </span>
@@ -210,7 +211,7 @@ export const UpgradeModal: React.FC = () => {
                 )}
               </div>
               <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                Your card will be charged ${finalTotal.toFixed(2)} for instant access.
+                {t('upgrade_charge_notice', { total: finalTotal.toFixed(2) })}
               </p>
             </div>
 
@@ -223,7 +224,7 @@ export const UpgradeModal: React.FC = () => {
                     type="text"
                     value={promoCode}
                     onChange={(e) => setPromoCode(e.target.value)}
-                    placeholder="Coupon code (e.g. LAUNCH50)"
+                    placeholder={t('upgrade_coupon_placeholder')}
                     className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-indigo-500"
                   />
                 </div>
@@ -231,7 +232,7 @@ export const UpgradeModal: React.FC = () => {
                   type="submit"
                   className="px-3 py-1.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 text-xs font-semibold hover:bg-slate-300 dark:hover:bg-slate-600 transition-colors cursor-pointer"
                 >
-                  Apply
+                  {t('upgrade_apply')}
                 </button>
               </div>
               {promoMessage && (
@@ -245,7 +246,7 @@ export const UpgradeModal: React.FC = () => {
             <form onSubmit={handleSubmitPayment} className="space-y-3">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  Cardholder Name
+                  {t('upgrade_cardholder')}
                 </label>
                 <input
                   type="text"
@@ -258,7 +259,7 @@ export const UpgradeModal: React.FC = () => {
 
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  Card Number
+                  {t('upgrade_card_number')}
                 </label>
                 <div className="relative">
                   <CreditCard className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -275,7 +276,7 @@ export const UpgradeModal: React.FC = () => {
               <div className="grid grid-cols-2 gap-2">
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                    Expiration
+                    {t('upgrade_expiration')}
                   </label>
                   <input
                     type="text"
@@ -288,7 +289,7 @@ export const UpgradeModal: React.FC = () => {
                 </div>
                 <div>
                   <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                    CVC
+                    {t('upgrade_cvc')}
                   </label>
                   <input
                     type="text"
@@ -309,12 +310,12 @@ export const UpgradeModal: React.FC = () => {
                 {isProcessing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>Processing Subscription...</span>
+                    <span>{t('upgrade_processing')}</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-3.5 h-3.5" />
-                    <span>Pay ${finalTotal.toFixed(2)} & Activate Pro Now</span>
+                    <span>{t('upgrade_pay_btn', { total: finalTotal.toFixed(2) })}</span>
                   </>
                 )}
               </button>

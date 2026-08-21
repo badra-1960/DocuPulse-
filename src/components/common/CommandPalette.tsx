@@ -19,6 +19,8 @@ import {
   LayoutDashboard,
   Crown,
   ShieldAlert,
+  FileSpreadsheet,
+  Presentation,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -34,6 +36,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Stamp: <Stamp className="w-4 h-4 text-purple-500" />,
   Hash: <Hash className="w-4 h-4 text-slate-500" />,
   RotateCw: <RotateCw className="w-4 h-4 text-orange-500" />,
+  FileSpreadsheet: <FileSpreadsheet className="w-4 h-4 text-emerald-600" />,
+  Presentation: <Presentation className="w-4 h-4 text-orange-500" />,
 };
 
 export const CommandPalette: React.FC = () => {
@@ -44,9 +48,22 @@ export const CommandPalette: React.FC = () => {
     setCurrentView,
     setIsUpgradeModalOpen,
     user,
+    t,
   } = useApp();
 
   const [query, setQuery] = useState('');
+
+  const getToolTitle = (id: string, fallback: string) => {
+    const key = `tool_${id.replace(/-/g, '_')}_name`;
+    const translated = t(key);
+    return translated !== key ? translated : fallback;
+  };
+
+  const getToolTagline = (id: string, fallback: string) => {
+    const key = `tool_${id.replace(/-/g, '_')}_desc`;
+    const translated = t(key);
+    return translated !== key ? translated : fallback;
+  };
 
   useEffect(() => {
     if (isCommandPaletteOpen) {
@@ -56,12 +73,18 @@ export const CommandPalette: React.FC = () => {
 
   if (!isCommandPaletteOpen) return null;
 
-  const filteredTools = TOOLS_LIST.filter(
-    (t) =>
-      t.name.toLowerCase().includes(query.toLowerCase()) ||
-      t.tagline.toLowerCase().includes(query.toLowerCase()) ||
-      t.category.toLowerCase().includes(query.toLowerCase())
-  );
+  const filteredTools = TOOLS_LIST.filter((tool) => {
+    const localizedName = getToolTitle(tool.id, tool.name).toLowerCase();
+    const localizedTagline = getToolTagline(tool.id, tool.tagline).toLowerCase();
+    const q = query.toLowerCase();
+    return (
+      localizedName.includes(q) ||
+      localizedTagline.includes(q) ||
+      tool.name.toLowerCase().includes(q) ||
+      tool.tagline.toLowerCase().includes(q) ||
+      tool.category.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center pt-20 p-4 bg-slate-950/60 backdrop-blur-sm animate-in fade-in-50">
@@ -73,7 +96,7 @@ export const CommandPalette: React.FC = () => {
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search tools, conversions, settings... (e.g. merge, compress, ocr)"
+            placeholder={t('tools_search_placeholder')}
             autoFocus
             className="w-full px-3 py-4 text-sm bg-transparent text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
           />
@@ -88,7 +111,7 @@ export const CommandPalette: React.FC = () => {
         {/* Results List */}
         <div className="max-h-96 overflow-y-auto p-2 space-y-1">
           <p className="px-3 py-1.5 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-            Tools & Actions ({filteredTools.length})
+            {t('featured_tools')} ({filteredTools.length})
           </p>
 
           {filteredTools.map((tool) => (
@@ -107,7 +130,7 @@ export const CommandPalette: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                      {tool.name}
+                      {getToolTitle(tool.id, tool.name)}
                     </span>
                     {tool.badge && (
                       <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-50 dark:bg-indigo-950 text-indigo-600 dark:text-indigo-400">
@@ -116,7 +139,7 @@ export const CommandPalette: React.FC = () => {
                     )}
                   </div>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1">
-                    {tool.tagline}
+                    {getToolTagline(tool.id, tool.tagline)}
                   </p>
                 </div>
               </div>
@@ -135,7 +158,7 @@ export const CommandPalette: React.FC = () => {
           {/* Quick System Navigation */}
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
             <p className="px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              System Shortcuts
+              {t('nav_tools')}
             </p>
             <div className="grid grid-cols-2 gap-1 px-1">
               <button
@@ -146,7 +169,7 @@ export const CommandPalette: React.FC = () => {
                 className="flex items-center gap-2 p-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left cursor-pointer"
               >
                 <LayoutDashboard className="w-4 h-4 text-indigo-500" />
-                <span>My Dashboard</span>
+                <span>{t('nav_dashboard')}</span>
               </button>
               <button
                 onClick={() => {
@@ -156,7 +179,7 @@ export const CommandPalette: React.FC = () => {
                 className="flex items-center gap-2 p-2 rounded-lg text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-left cursor-pointer"
               >
                 <Crown className="w-4 h-4 text-amber-500" />
-                <span>Upgrade Plan</span>
+                <span>{t('nav_upgrade')}</span>
               </button>
               {user.role === 'admin' && (
                 <button
@@ -167,7 +190,7 @@ export const CommandPalette: React.FC = () => {
                   className="flex items-center gap-2 p-2 rounded-lg text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-left cursor-pointer col-span-2"
                 >
                   <ShieldAlert className="w-4 h-4" />
-                  <span>Admin Panel & System Logs</span>
+                  <span>{t('nav_admin')}</span>
                 </button>
               )}
             </div>

@@ -1,6 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TOOLS_LIST } from '../../data/toolsData';
+import { LANGUAGES } from '../../i18n/translations';
+import { Language } from '../../types';
+import { LanguageSelector } from './LanguageSelector';
 import {
   FileText,
   Search,
@@ -26,6 +29,11 @@ import {
   RotateCw,
   Hash,
   FileType,
+  Globe,
+  Lock,
+  Check,
+  FileSpreadsheet,
+  Presentation,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -41,6 +49,8 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Stamp: <Stamp className="w-4 h-4 text-purple-500" />,
   Hash: <Hash className="w-4 h-4 text-slate-500" />,
   RotateCw: <RotateCw className="w-4 h-4 text-orange-500" />,
+  FileSpreadsheet: <FileSpreadsheet className="w-4 h-4 text-emerald-600" />,
+  Presentation: <Presentation className="w-4 h-4 text-orange-500" />,
 };
 
 export const Header: React.FC = () => {
@@ -59,6 +69,9 @@ export const Header: React.FC = () => {
     toggleTheme,
     logout,
     loginAs,
+    language,
+    setLanguage,
+    t,
   } = useApp();
 
   const [isToolsDropdownOpen, setIsToolsDropdownOpen] = useState(false);
@@ -97,7 +110,7 @@ export const Header: React.FC = () => {
             onClick={() => setIsUpgradeModalOpen(true)}
             className="underline hover:text-indigo-100 font-semibold cursor-pointer"
           >
-            Upgrade Now
+            {t('nav_pricing')}
           </button>
         </div>
       )}
@@ -146,7 +159,7 @@ export const Header: React.FC = () => {
                   }`}
                 >
                   <Layers className="w-4 h-4 text-indigo-500" />
-                  <span>All Tools</span>
+                  <span>{t('nav_tools')}</span>
                   <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isToolsDropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
 
@@ -193,7 +206,7 @@ export const Header: React.FC = () => {
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                Pricing & Plans
+                {t('nav_pricing')}
               </button>
 
               <button
@@ -204,44 +217,44 @@ export const Header: React.FC = () => {
                     : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
                 }`}
               >
-                Dashboard
+                {t('nav_dashboard')}
               </button>
             </nav>
           </div>
 
           {/* Right Header Actions */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
             {/* Quick Search Shortcut */}
             <button
               onClick={() => setIsCommandPaletteOpen(true)}
               className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-100 dark:bg-slate-800/90 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 text-xs font-medium border border-slate-200/80 dark:border-slate-700/80 transition-colors cursor-pointer"
             >
               <Search className="w-3.5 h-3.5" />
-              <span>Search tools...</span>
+              <span>{t('nav_search_placeholder')}</span>
               <kbd className="px-1.5 py-0.5 rounded bg-white dark:bg-slate-900 text-[10px] font-semibold text-slate-500 border border-slate-200 dark:border-slate-800 shadow-2xs">
                 ⌘K
               </kbd>
             </button>
 
-            {/* Daily Free Quotas Badge (3 Free daily operations) */}
+            {/* Daily Free Quotas / Free Trial Badge */}
             {!isUnlimited ? (
               <div
                 onClick={() => setIsUpgradeModalOpen(true)}
-                className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-900/60 cursor-pointer hover:bg-amber-100/80 dark:hover:bg-amber-950/70 transition-all group"
-                title="Free starter tier: 3 free operations every 24 hours. Click to get Unlimited."
+                className="hidden lg:flex items-center gap-2.5 px-3 py-1.5 rounded-xl bg-emerald-50/80 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-900/50 cursor-pointer hover:bg-emerald-100/80 dark:hover:bg-emerald-950/50 transition-all group"
+                title="Free trial tier: 3 daily free operations. Click to upgrade to Unlimited."
               >
-                <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <div className="text-left">
-                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-amber-900 dark:text-amber-300">
-                    <span>{remainingUses} of {freeLimit} free uses left</span>
-                    <Crown className="w-3 h-3 text-amber-600 group-hover:scale-110 transition-transform" />
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-900 dark:text-emerald-300">
+                    <span>{remainingUses > 0 ? `${remainingUses}/${freeLimit} Free Trial Uses` : 'Trial limit reached'}</span>
+                    <Crown className="w-3 h-3 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
                   </div>
-                  <div className="w-24 h-1.5 bg-amber-200 dark:bg-amber-900/80 rounded-full overflow-hidden mt-0.5">
+                  <div className="w-24 h-1.5 bg-emerald-200/80 dark:bg-emerald-900/60 rounded-full overflow-hidden mt-0.5">
                     <div
-                      className={`h-full transition-all ${
-                        quotaPercent >= 100 ? 'bg-red-500' : quotaPercent >= 66 ? 'bg-amber-500' : 'bg-emerald-500'
+                      className={`h-full transition-all duration-300 ${
+                        remainingUses === 0 ? 'bg-amber-500' : 'bg-emerald-500'
                       }`}
-                      style={{ width: `${quotaPercent}%` }}
+                      style={{ width: `${Math.max(10, ((freeLimit - remainingUses) / freeLimit) * 100)}%` }}
                     />
                   </div>
                 </div>
@@ -249,9 +262,12 @@ export const Header: React.FC = () => {
             ) : (
               <div className="hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-gradient-to-r from-indigo-500/10 to-violet-500/10 border border-indigo-200 dark:border-indigo-900/50 text-indigo-700 dark:text-indigo-300 text-xs font-bold">
                 <Crown className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400 fill-indigo-500/30" />
-                <span>{user.plan === 'business' ? 'Business Unlimited' : 'Pro Unlimited'}</span>
+                <span>{user.role === 'admin' ? t('nav_admin_console') : user.plan === 'business' ? t('nav_business_unlimited') : t('nav_pro_unlimited')}</span>
               </div>
             )}
+
+            {/* Language Switcher Dropdown */}
+            <LanguageSelector />
 
             {/* Upgrade CTA Button */}
             {!isUnlimited && (
@@ -260,7 +276,7 @@ export const Header: React.FC = () => {
                 className="hidden sm:flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold shadow-md shadow-indigo-500/25 transition-all hover:scale-105 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                <span>Go Pro</span>
+                <span>{t('nav_go_pro')}</span>
               </button>
             )}
 
@@ -298,13 +314,15 @@ export const Header: React.FC = () => {
                         {user.name}
                       </p>
                       <span className={`text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
-                        user.plan === 'pro'
+                        user.role === 'admin'
+                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300'
+                          : user.plan === 'pro'
                           ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300'
                           : user.plan === 'business'
                           ? 'bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300'
                           : 'bg-slate-200 text-slate-700 dark:bg-slate-700 dark:text-slate-300'
                       }`}>
-                        {user.plan}
+                        {user.role === 'admin' ? 'ADMIN' : user.plan}
                       </span>
                     </div>
                     <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
@@ -323,7 +341,7 @@ export const Header: React.FC = () => {
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-950/60 rounded-lg text-left transition-colors cursor-pointer border border-rose-200/60 dark:border-rose-900/50"
                       >
                         <ShieldAlert className="w-4 h-4 text-rose-500 shrink-0" />
-                        <span>Admin Control Center</span>
+                        <span>{t('nav_admin_center')}</span>
                       </button>
                     )}
 
@@ -335,7 +353,7 @@ export const Header: React.FC = () => {
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer"
                     >
                       <LayoutDashboard className="w-4 h-4 text-indigo-500" />
-                      <span>User Dashboard & History</span>
+                      <span>{t('nav_dashboard')}</span>
                     </button>
 
                     <button
@@ -346,7 +364,7 @@ export const Header: React.FC = () => {
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer"
                     >
                       <Crown className="w-4 h-4 text-amber-500" />
-                      <span>Subscription & Billing</span>
+                      <span>{t('nav_pricing')}</span>
                     </button>
 
                     {user.role !== 'admin' && (
@@ -359,13 +377,13 @@ export const Header: React.FC = () => {
                         className="w-full flex items-center gap-2.5 px-3 py-1.5 text-[11px] font-medium text-slate-500 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-left transition-colors cursor-pointer"
                       >
                         <Lock className="w-3.5 h-3.5 text-slate-400" />
-                        <span>Staff Admin Sign-in</span>
+                        <span>{t('nav_staff_admin')}</span>
                       </button>
                     )}
 
                     <div className="pt-2 pb-1 border-t border-slate-100 dark:border-slate-800">
                       <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                        Demo Account Fast Switcher
+                        {t('dash_switch_account_title')}
                       </p>
                       <div className="grid grid-cols-1 gap-1 px-1">
                         <button
@@ -379,8 +397,8 @@ export const Header: React.FC = () => {
                               : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
-                          <span>👤 Free User</span>
-                          <span className="text-[10px] opacity-70">3 ops/day</span>
+                          <span>👤 Alex Morgan</span>
+                          <span className="text-[10px] opacity-70">{t('nav_free_user')} (3/day)</span>
                         </button>
                         <button
                           onClick={() => {
@@ -393,8 +411,8 @@ export const Header: React.FC = () => {
                               : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
-                          <span>⭐ Pro Plan</span>
-                          <span className="text-[10px] opacity-70">$9/mo</span>
+                          <span>⭐ Sarah Connor</span>
+                          <span className="text-[10px] opacity-70">{t('nav_pro_plan')}</span>
                         </button>
                         <button
                           onClick={() => {
@@ -407,8 +425,22 @@ export const Header: React.FC = () => {
                               : 'hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-600 dark:text-slate-400'
                           }`}
                         >
-                          <span>🏢 Business Team</span>
-                          <span className="text-[10px] opacity-70">$24/mo</span>
+                          <span>🏢 David Vance</span>
+                          <span className="text-[10px] opacity-70">{t('nav_business_team')}</span>
+                        </button>
+                        <button
+                          onClick={() => {
+                            loginAs('admin');
+                            setIsUserDropdownOpen(false);
+                          }}
+                          className={`px-2 py-1.5 rounded text-[11px] font-medium text-left transition-colors cursor-pointer flex items-center justify-between ${
+                            user.role === 'admin'
+                              ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 font-bold'
+                              : 'hover:bg-rose-50 dark:hover:bg-rose-950/30 text-rose-600 dark:text-rose-400'
+                          }`}
+                        >
+                          <span>🛡️ Camara (Admin)</span>
+                          <span className="text-[10px] opacity-70">{t('nav_admin_console')}</span>
                         </button>
                       </div>
                     </div>
@@ -422,7 +454,7 @@ export const Header: React.FC = () => {
                         className="w-full flex items-center gap-2.5 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg text-left transition-colors cursor-pointer"
                       >
                         <LogOut className="w-3.5 h-3.5" />
-                        <span>Sign Out Session</span>
+                        <span>{t('nav_sign_out')}</span>
                       </button>
                     </div>
                   </div>
@@ -452,7 +484,7 @@ export const Header: React.FC = () => {
               }}
               className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
             >
-              Home
+              {t('nav_home')}
             </button>
             <button
               onClick={() => {
@@ -461,7 +493,7 @@ export const Header: React.FC = () => {
               }}
               className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
             >
-              Pricing
+              {t('nav_pricing')}
             </button>
             <button
               onClick={() => {
@@ -470,12 +502,35 @@ export const Header: React.FC = () => {
               }}
               className="px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-900 dark:text-white"
             >
-              Dashboard
+              {t('nav_dashboard')}
             </button>
           </div>
 
+          {/* Mobile Language Switcher Row */}
           <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-            <p className="text-xs font-bold text-slate-500 mb-2">Featured Tools</p>
+            <p className="text-xs font-bold text-slate-500 mb-2">{t('lang_select')}</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {LANGUAGES.map((lang) => (
+                <button
+                  key={lang.code}
+                  onClick={() => {
+                    setLanguage(lang.code);
+                  }}
+                  className={`flex items-center gap-2 p-2 rounded-lg text-xs font-medium text-left ${
+                    language === lang.code
+                      ? 'bg-indigo-600 text-white font-bold'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200'
+                  }`}
+                >
+                  <span>{lang.flag}</span>
+                  <span>{lang.nativeName}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+            <p className="text-xs font-bold text-slate-500 mb-2">{t('featured_tools')}</p>
             <div className="grid grid-cols-2 gap-1.5 max-h-48 overflow-y-auto">
               {TOOLS_LIST.slice(0, 8).map((tool) => (
                 <button

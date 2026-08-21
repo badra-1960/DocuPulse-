@@ -23,6 +23,7 @@ export const AuthModal: React.FC = () => {
     register,
     loginAdmin,
     showToast,
+    t,
   } = useApp();
 
   const [name, setName] = useState('Alex Morgan');
@@ -97,17 +98,17 @@ export const AuthModal: React.FC = () => {
 
           <h3 className="text-xl font-extrabold text-slate-900 dark:text-white">
             {authModalTab === 'admin'
-              ? 'Administrator Authentication'
+              ? t('auth_admin_title')
               : authModalTab === 'login'
-              ? 'Sign in to DocuPulse'
-              : 'Create your account'}
+              ? t('auth_login_title')
+              : t('auth_register_title')}
           </h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
             {authModalTab === 'admin'
-              ? 'Authorized personnel only. Master password verification required.'
+              ? t('auth_admin_desc')
               : authModalTab === 'login'
-              ? 'Access your converted documents, quotas, and subscription.'
-              : 'Get 3 free operations daily and fast document processing.'}
+              ? t('auth_login_desc')
+              : t('auth_register_desc')}
           </p>
         </div>
 
@@ -122,7 +123,7 @@ export const AuthModal: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Sign In
+            {t('auth_tab_login')}
           </button>
           <button
             type="button"
@@ -133,7 +134,7 @@ export const AuthModal: React.FC = () => {
                 : 'text-slate-500 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            Register
+            {t('auth_tab_register')}
           </button>
           <button
             type="button"
@@ -145,7 +146,7 @@ export const AuthModal: React.FC = () => {
             }`}
           >
             <ShieldAlert className="w-3.5 h-3.5" />
-            <span>Admin</span>
+            <span>{t('auth_tab_admin')}</span>
           </button>
         </div>
 
@@ -164,7 +165,7 @@ export const AuthModal: React.FC = () => {
             <>
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Administrator Email
+                  {t('auth_admin_email')}
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -181,7 +182,7 @@ export const AuthModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Master Admin Password
+                  {t('auth_admin_password')}
                 </label>
                 <div className="relative">
                   <Key className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -206,7 +207,7 @@ export const AuthModal: React.FC = () => {
                 ) : (
                   <>
                     <ShieldCheck className="w-4 h-4" />
-                    <span>Verify & Access Admin Console</span>
+                    <span>{t('auth_submit_admin')}</span>
                   </>
                 )}
               </button>
@@ -215,14 +216,14 @@ export const AuthModal: React.FC = () => {
               <div className="mt-4 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    Administrator Credentials
+                    {t('auth_admin_creds_title')}
                   </span>
                   <button
                     type="button"
                     onClick={handleFillAdminCredentials}
                     className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
-                    Auto-Fill
+                    {t('auth_auto_fill')}
                   </button>
                 </div>
                 <div className="space-y-1 text-xs font-mono">
@@ -243,7 +244,7 @@ export const AuthModal: React.FC = () => {
               {authModalTab === 'register' && (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                    Full Name
+                    {t('auth_full_name')}
                   </label>
                   <div className="relative">
                     <UserIcon className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -261,7 +262,7 @@ export const AuthModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Email Address
+                  {t('auth_email')}
                 </label>
                 <div className="relative">
                   <Mail className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -278,7 +279,7 @@ export const AuthModal: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Password
+                  {t('auth_password')}
                 </label>
                 <div className="relative">
                   <Lock className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
@@ -302,7 +303,7 @@ export const AuthModal: React.FC = () => {
                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 ) : (
                   <>
-                    <span>{authModalTab === 'login' ? 'Sign In' : 'Create Account'}</span>
+                    <span>{authModalTab === 'login' ? t('auth_submit_login') : t('auth_submit_register')}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </>
                 )}

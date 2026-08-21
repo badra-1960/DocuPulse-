@@ -18,6 +18,8 @@ import {
   RotateCw,
   Check,
   Zap,
+  FileSpreadsheet,
+  Presentation,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -33,14 +35,53 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   Stamp: <Stamp className="w-6 h-6 text-purple-500" />,
   Hash: <Hash className="w-6 h-6 text-slate-500" />,
   RotateCw: <RotateCw className="w-6 h-6 text-orange-500" />,
+  FileSpreadsheet: <FileSpreadsheet className="w-6 h-6 text-emerald-600" />,
+  Presentation: <Presentation className="w-6 h-6 text-orange-500" />,
 };
 
 export const ToolGrid: React.FC = () => {
-  const { openTool } = useApp();
+  const { openTool, t } = useApp();
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
 
-  const filteredTools = TOOLS_LIST.filter((tool) => {
+  const getCategoryLabel = (catId: string, defaultLabel: string) => {
+    switch (catId) {
+      case 'all': return t('cat_all');
+      case 'pdf': return t('cat_pdf');
+      case 'convert': return t('cat_convert');
+      case 'image': return t('cat_image');
+      case 'ai': return t('cat_ai');
+      case 'security': return t('cat_security');
+      default: return defaultLabel;
+    }
+  };
+
+  const getLocalizedBadge = (badge?: string) => {
+    if (!badge) return '';
+    if (badge === 'Popular') return t('badge_popular');
+    if (badge === 'Fast') return t('badge_fast');
+    if (badge === 'New') return t('badge_new');
+    if (badge === 'AI Powered') return t('badge_ai_powered');
+    return badge;
+  };
+
+  const getLocalizedTool = (tool: (typeof TOOLS_LIST)[0]) => {
+    const prefix = `tool_${tool.id.replace(/-/g, '_')}`;
+    const locName = t(`${prefix}_name`);
+    const locTag = t(`${prefix}_tagline`);
+    const locDesc = t(`${prefix}_desc`);
+
+    return {
+      ...tool,
+      name: locName !== `${prefix}_name` ? locName : tool.name,
+      tagline: locTag !== `${prefix}_tagline` ? locTag : tool.tagline,
+      description: locDesc !== `${prefix}_desc` ? locDesc : tool.description,
+    };
+  };
+
+  const localizedTools = TOOLS_LIST.map(getLocalizedTool);
+
+  const filteredTools = localizedTools.filter((tool) => {
     const matchesCategory = selectedCategory === 'all' || tool.category === selectedCategory;
     const matchesSearch =
       tool.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -58,13 +99,13 @@ export const ToolGrid: React.FC = () => {
         <div className="text-center max-w-3xl mx-auto mb-10">
           <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 text-xs font-bold mb-3 border border-indigo-200/60 dark:border-indigo-800/60">
             <Zap className="w-3.5 h-3.5" />
-            <span>Complete PDF & Image Engine</span>
+            <span>{t('engine_badge')}</span>
           </div>
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Explore All 12 High-Performance Tools
+            {t('explore_tools_title')}
           </h2>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-2.5">
-            Select any tool below to begin processing documents right in your browser.
+            {t('explore_tools_subtitle')}
           </p>
         </div>
 
@@ -82,7 +123,7 @@ export const ToolGrid: React.FC = () => {
                     : 'bg-slate-100 dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-200 dark:hover:bg-slate-800'
                 }`}
               >
-                <span>{cat.label}</span>
+                <span>{getCategoryLabel(cat.id, cat.label)}</span>
                 <span className={`ml-1.5 px-1.5 py-0.2 rounded-full text-[10px] ${
                   selectedCategory === cat.id
                     ? 'bg-slate-700 dark:bg-slate-200 text-white dark:text-slate-900'
@@ -101,7 +142,7 @@ export const ToolGrid: React.FC = () => {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search by tool name or feature..."
+              placeholder={t('search_tools_placeholder')}
               className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-indigo-500"
             />
           </div>
@@ -130,7 +171,7 @@ export const ToolGrid: React.FC = () => {
                         ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200 dark:border-rose-800'
                         : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800'
                     }`}>
-                      {tool.badge}
+                      {getLocalizedBadge(tool.badge)}
                     </span>
                   )}
                 </div>
@@ -159,7 +200,7 @@ export const ToolGrid: React.FC = () => {
 
               {/* Action Button at bottom */}
               <div className="mt-6 pt-3 flex items-center justify-between text-xs font-bold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
-                <span>Launch Tool</span>
+                <span>{t('btn_launch_tool')}</span>
                 <div className="w-7 h-7 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white group-hover:border-indigo-600 transition-all">
                   <ArrowRight className="w-3.5 h-3.5" />
                 </div>
@@ -171,7 +212,7 @@ export const ToolGrid: React.FC = () => {
         {filteredTools.length === 0 && (
           <div className="py-16 text-center">
             <p className="text-base font-semibold text-slate-700 dark:text-slate-300">
-              No matching tools found for "{searchTerm}".
+              {t('no_tools_found', { term: searchTerm })}
             </p>
             <button
               onClick={() => {
@@ -180,7 +221,7 @@ export const ToolGrid: React.FC = () => {
               }}
               className="mt-3 text-xs font-bold text-indigo-600 dark:text-indigo-400 underline cursor-pointer"
             >
-              Reset search and view all tools
+              {t('btn_reset_search')}
             </button>
           </div>
         )}

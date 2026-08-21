@@ -8,7 +8,9 @@ import {
   ToastMessage,
   ToolId,
   UserPlan,
+  Language,
 } from '../types';
+import { TRANSLATIONS, TranslationKey, LANGUAGES, loadDictionary } from '../i18n/translations';
 import confetti from 'canvas-confetti';
 
 interface AppContextType {
@@ -20,13 +22,18 @@ interface AppContextType {
   searchQuery: string;
   setSearchQuery: (q: string) => void;
 
+  // Language & i18n
+  language: Language;
+  setLanguage: (lang: Language) => void;
+  t: (key: TranslationKey | string, params?: Record<string, string | number>, fallback?: string) => string;
+
   // User & Auth
   user: UserProfile;
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   login: (email: string, password?: string) => void;
   register: (name: string, email: string) => void;
   loginAdmin: (email: string, password: string) => boolean;
-  loginAs: (role: 'free' | 'pro' | 'business') => void;
+  loginAs: (role: 'free' | 'pro' | 'business' | 'admin') => void;
   logout: () => void;
   isAuthModalOpen: boolean;
   setIsAuthModalOpen: (open: boolean) => void;
@@ -54,6 +61,7 @@ interface AppContextType {
   selectedUpgradePlan: UserPlan;
   setSelectedUpgradePlan: (plan: UserPlan) => void;
   upgradeSubscription: (plan: UserPlan, billingCycle?: 'monthly' | 'annual') => void;
+  cancelSubscription: () => void;
   invoices: Invoice[];
 
   // Processing History
@@ -87,6 +95,46 @@ const DEFAULT_USER: UserProfile = {
   billingCycle: 'monthly',
   memberSince: 'March 2026',
   apiKey: 'dp_live_k8f934j2091m38x',
+};
+
+export const DEMO_USERS = {
+  free: DEFAULT_USER,
+  pro: {
+    id: 'usr_pro_1033',
+    name: 'Sarah Connor',
+    email: 'sarah.connor@designstudio.io',
+    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    role: 'pro' as const,
+    plan: 'pro' as const,
+    billingCycle: 'annual' as const,
+    memberSince: 'January 2026',
+    apiKey: 'dp_live_pro_9918237192837',
+    subscriptionEndDate: '2027-01-15',
+  },
+  business: {
+    id: 'usr_biz_501',
+    name: 'David Vance',
+    email: 'david@enterprise-apex.com',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    role: 'business' as const,
+    plan: 'business' as const,
+    billingCycle: 'annual' as const,
+    memberSince: 'November 2025',
+    organization: 'Apex Digital Global Inc.',
+    apiKey: 'dp_live_ent_558833991122',
+    subscriptionEndDate: '2027-03-01',
+  },
+  admin: {
+    id: 'usr_admin_001',
+    name: 'Camara Badra Ali (Administrator)',
+    email: 'admin@docupulse.io',
+    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+    role: 'admin' as const,
+    plan: 'business' as const,
+    billingCycle: 'annual' as const,
+    memberSince: 'September 2025',
+    apiKey: 'dp_root_admin_master_superkey_2026',
+  },
 };
 
 const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
@@ -219,6 +267,78 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Toasts
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
 
+  // Language State with Browser Detection & Persistence
+  const [language, setLanguageState] = useState<Language>(() => {
+    const saved = localStorage.getItem('docupulse_language');
+    if (saved && (saved === 'en' || saved === 'fr' || saved === 'es' || saved === 'de')) {
+      return saved as Language;
+    }
+    // Automatically detect browser language for first-time visitors (fallback English)
+    if (typeof navigator !== 'undefined' && navigator.language) {
+      const browserLang = navigator.language.toLowerCase();
+      if (browserLang.startsWith('fr')) return 'fr';
+      if (browserLang.startsWith('es')) return 'es';
+      if (browserLang.startsWith('de')) return 'de';
+    }
+    return 'en';
+  });
+
+  const [activeDictionaries, setActiveDictionaries] = useState<Record<Language, Record<string, string>>>(TRANSLATIONS);
+
+  // Dynamic language switcher: updates state reactively without page reload
+  const setLanguage = (lang: Language) => {
+    setLanguageState(lang);
+    localStorage.setItem('docupulse_language', lang);
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang;
+    }
+
+    // Load JSON dictionary asynchronously without page reload
+    loadDictionary(lang).then((dict) => {
+      setActiveDictionaries((prev) => ({
+        ...prev,
+        [lang]: dict,
+      }));
+    });
+
+    const langObj = LANGUAGES.find((l) => l.code === lang);
+    const langName = langObj ? `${langObj.flag} ${langObj.nativeName}` : lang;
+    const currentDict = activeDictionaries[lang] || TRANSLATIONS[lang] || TRANSLATIONS.en;
+    showToast('info', currentDict.toast_language_changed || 'Language Changed', `${langName}`);
+  };
+
+  // Translation lookup helper:
+  // Returns translation string, interpolated with params if provided.
+  // If key is missing in active dictionary & fallback dictionary, returns fallback (default ''), NEVER the technical key name!
+  const t = (
+    key: TranslationKey | string,
+    params?: Record<string, string | number>,
+    fallback: string = ''
+  ): string => {
+    const dict = activeDictionaries[language] || TRANSLATIONS[language] || TRANSLATIONS.en;
+    let val: string | undefined = dict ? dict[key as string] : undefined;
+
+    // If key not found in active language, try English fallback dictionary
+    if (val === undefined || val === null || val === '') {
+      const fallbackDict = activeDictionaries['en'] || TRANSLATIONS.en;
+      val = fallbackDict ? fallbackDict[key as string] : undefined;
+    }
+
+    // CRITICAL REQUIREMENT: If still not found, NEVER return the technical key string (e.g. 'plan_pro_name').
+    // Return empty string "" or the provided fallback (e.g. '...')
+    if (val === undefined || val === null) {
+      return fallback;
+    }
+
+    let result = String(val);
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        result = result.replace(new RegExp(`\\{${k}\\}`, 'g'), String(v));
+      });
+    }
+    return result;
+  };
+
   // Persist user and settings
   useEffect(() => {
     localStorage.setItem('docupulse_user', JSON.stringify(user));
@@ -239,6 +359,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     localStorage.setItem('docupulse_invoices', JSON.stringify(invoices));
   }, [invoices]);
+
+  useEffect(() => {
+    localStorage.setItem('docupulse_language', language);
+  }, [language]);
 
   // Sync theme class to documentElement
   useEffect(() => {
@@ -476,46 +600,38 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Fast demo switcher for regular user roles
-  const loginAs = (role: 'free' | 'pro' | 'business') => {
-    if (currentView === 'admin') {
-      setCurrentView('home');
-    }
-
-    if (role === 'free') {
-      setUser(DEFAULT_USER);
-      showToast('info', 'Switched Account', 'Logged in as Free Starter user (3 daily ops limit).');
-    } else if (role === 'pro') {
-      setUser({
-        id: 'usr_pro_1033',
-        name: 'Sarah Connor',
-        email: 'sarah.connor@designstudio.io',
-        avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
-        role: 'pro',
-        plan: 'pro',
-        billingCycle: 'annual',
-        memberSince: 'January 2026',
-        apiKey: 'dp_live_pro_9918237192837',
-        subscriptionEndDate: '2027-01-15',
-      });
-      showToast('success', 'Switched Account', 'Logged in as DocuPulse Pro Subscriber (Unlimited operations).');
-    } else if (role === 'business') {
-      setUser({
-        id: 'usr_biz_501',
-        name: 'David Vance',
-        email: 'david@enterprise-apex.com',
-        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
-        role: 'business',
-        plan: 'business',
-        billingCycle: 'annual',
-        memberSince: 'November 2025',
-        organization: 'Apex Digital Global Inc.',
-        apiKey: 'dp_live_ent_558833991122',
-        subscriptionEndDate: '2027-03-01',
-      });
-      showToast('success', 'Switched Account', 'Logged in as Enterprise Team Subscriber.');
+  // Fast demo switcher for roles & accounts
+  const loginAs = (role: 'free' | 'pro' | 'business' | 'admin') => {
+    if (role === 'admin') {
+      setUser(DEMO_USERS.admin);
+      setCurrentView('admin');
+      showToast('success', t('toast_admin_granted'), 'Authenticated as Master System Administrator.');
+    } else {
+      if (currentView === 'admin') {
+        setCurrentView('home');
+      }
+      if (role === 'free') {
+        setUser(DEMO_USERS.free);
+        showToast('info', t('toast_account_switched'), 'Logged in as Free Starter user (3 daily ops limit).');
+      } else if (role === 'pro') {
+        setUser(DEMO_USERS.pro);
+        showToast('success', t('toast_account_switched'), 'Logged in as DocuPulse Pro Subscriber (Unlimited operations).');
+      } else if (role === 'business') {
+        setUser(DEMO_USERS.business);
+        showToast('success', t('toast_account_switched'), 'Logged in as Enterprise Team Subscriber.');
+      }
     }
     setIsAuthModalOpen(false);
+  };
+
+  const cancelSubscription = () => {
+    setUser((prev) => ({
+      ...prev,
+      plan: 'free',
+      role: 'user',
+      subscriptionEndDate: undefined,
+    }));
+    showToast('info', t('toast_sub_cancelled'), t('toast_sub_cancelled_msg'));
   };
 
   const logout = () => {
@@ -529,7 +645,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       plan: 'free',
       role: 'user',
     });
-    showToast('info', 'Logged Out', 'You are now operating in guest session.');
+    showToast('info', t('toast_logged_out'), 'You are now operating in guest session.');
   };
 
   const updateSystemSettings = (newSettings: Partial<SystemSettings>) => {
@@ -556,6 +672,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         openTool,
         searchQuery,
         setSearchQuery,
+        language,
+        setLanguage,
+        t,
         user,
         setUser,
         login,
@@ -576,6 +695,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         selectedUpgradePlan,
         setSelectedUpgradePlan,
         upgradeSubscription,
+        cancelSubscription,
         invoices,
         history,
         clearHistory,

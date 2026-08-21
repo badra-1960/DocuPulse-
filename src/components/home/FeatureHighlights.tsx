@@ -1,25 +1,24 @@
 import React from 'react';
+import { useApp } from '../../context/AppContext';
 import {
   Zap,
-  Shield,
-  Sparkles,
-  Layers,
-  Cpu,
-  RefreshCw,
   FolderLock,
+  Sparkles,
   Workflow,
 } from 'lucide-react';
 
 export const FeatureHighlights: React.FC = () => {
+  const { t } = useApp();
+
   return (
     <section className="py-16 md:py-24 bg-white dark:bg-slate-950 border-t border-slate-200/80 dark:border-slate-800/80 transition-colors">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center max-w-3xl mx-auto mb-14">
           <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-            Engineered for speed, privacy, and precision
+            {t('features_title')}
           </h2>
           <p className="text-sm sm:text-base text-slate-600 dark:text-slate-400 mt-3">
-            Why millions of professionals, attorneys, researchers, and creators rely on DocuPulse daily.
+            {t('features_subtitle')}
           </p>
         </div>
 
@@ -29,10 +28,10 @@ export const FeatureHighlights: React.FC = () => {
               <Zap className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1.5">
-              Instant Local Processing
+              {t('feat_local_title')}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Most operations run client-side in your web browser via WebAssembly & Web Workers, eliminating slow upload wait times.
+              {t('feat_local_desc')}
             </p>
           </div>
 
@@ -41,10 +40,10 @@ export const FeatureHighlights: React.FC = () => {
               <FolderLock className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1.5">
-              Zero Data Retention
+              {t('feat_retention_title')}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Your files belong to you. We do not read, index, or store your documents. All temporary cache buffers auto-destruct within 60 minutes.
+              {t('feat_retention_desc')}
             </p>
           </div>
 
@@ -53,10 +52,10 @@ export const FeatureHighlights: React.FC = () => {
               <Sparkles className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1.5">
-              Gemini AI Intelligence
+              {t('feat_ai_title')}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              State-of-the-art multimodal AI reads degraded scans, extracts complex financial tables, and produces executive summaries in seconds.
+              {t('feat_ai_desc')}
             </p>
           </div>
 
@@ -65,10 +64,10 @@ export const FeatureHighlights: React.FC = () => {
               <Workflow className="w-6 h-6" />
             </div>
             <h3 className="text-base font-bold text-slate-900 dark:text-white mb-1.5">
-              Simultaneous Batch Workflows
+              {t('feat_batch_title')}
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-              Process dozens of files concurrently. Reorder pages with tactile drag-and-drop, customize presets, and download as zipped packages.
+              {t('feat_batch_desc')}
             </p>
           </div>
         </div>

@@ -14,6 +14,14 @@ import {
   addPageNumbers,
   rotatePdfPages,
 } from '../../services/pdfEngine';
+import {
+  convertPdfToExcel,
+  convertWordToPdf as convertWordToPdfEngine,
+  convertPptToPdf,
+  convertExcelToPdf,
+  getExcelSheetNames,
+  createZipArchive,
+} from '../../services/conversionEngine';
 import { processImageFile, batchProcessImages } from '../../services/imageEngine';
 import { extractDocumentWithAi, analyzeDocumentText } from '../../services/aiService';
 import {
@@ -42,6 +50,9 @@ import {
   RotateCw,
   FileType,
   Crown,
+  FileSpreadsheet,
+  Presentation,
+  Archive,
 } from 'lucide-react';
 
 export const ToolWorkspace: React.FC = () => {
@@ -56,10 +67,29 @@ export const ToolWorkspace: React.FC = () => {
     user,
     quota,
     systemSettings,
+    t,
   } = useApp();
 
   const tool = TOOLS_LIST.find((t) => t.id === activeToolId) || TOOLS_LIST[0];
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const getToolTitle = (id: string, fallback: string) => {
+    const key = `tool_${id.replace(/-/g, '_')}_name`;
+    const translated = t(key);
+    return translated !== key ? translated : fallback;
+  };
+
+  const getToolTagline = (id: string, fallback: string) => {
+    const key = `tool_${id.replace(/-/g, '_')}_desc`;
+    const translated = t(key);
+    return translated !== key ? translated : fallback;
+  };
+
+  const getCategoryLabel = (category: string) => {
+    const key = `cat_${category}`;
+    const translated = t(key);
+    return translated !== key ? translated : category.toUpperCase();
+  };
 
   // General State
   const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -121,8 +151,12 @@ export const ToolWorkspace: React.FC = () => {
   // Rotate PDF
   const [pdfRotateDegrees, setPdfRotateDegrees] = useState<number>(90);
 
+  // Conversion Options (Excel, PPT, Word)
+  const [excelSheets, setExcelSheets] = useState<string[]>(['Sheet1']);
+  const [selectedExcelSheets, setSelectedExcelSheets] = useState<string[]>(['Sheet1']);
+
   // File Upload Handlers
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
       const files: File[] = Array.from(e.target.files);
       const isUnlimited = user.plan === 'pro' || user.plan === 'business' || user.role === 'admin';
@@ -141,11 +175,22 @@ export const ToolWorkspace: React.FC = () => {
       setRenderedPages([]);
       setAiExtractedText('');
 
-      // If single image, generate preview URL
       const first = files[0];
       if (first && first.type.startsWith('image/')) {
         const url = URL.createObjectURL(first);
         setImagePreviewUrl(url);
+      }
+
+      // Auto-extract Excel sheets if Excel to PDF tool
+      if (first && tool.id === 'excel-to-pdf') {
+        try {
+          const sheets = await getExcelSheetNames(first);
+          setExcelSheets(sheets);
+          setSelectedExcelSheets(sheets);
+        } catch {
+          setExcelSheets(['Sheet1']);
+          setSelectedExcelSheets(['Sheet1']);
+        }
       }
     }
   };
@@ -295,6 +340,58 @@ export const ToolWorkspace: React.FC = () => {
           url,
           { count: res.pageCount }
         );
+      } else if (tool.id === 'pdf-to-excel') {
+        const res = await convertPdfToExcel(firstFile, (p, s) => {
+          setProgressPercent(p);
+          setProgressStatus(s);
+        });
+        const url = URL.createObjectURL(res.blob);
+        setResultBlob(res.blob);
+        setResultUrl(url);
+        setResultFileName(res.fileName);
+        setResultMetadata({ sheets: res.sheetCount, rows: res.rowCount });
+
+        recordOperation('pdf-to-excel', 'PDF to Excel', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
+      } else if (tool.id === 'excel-to-pdf') {
+        const res = await convertExcelToPdf(
+          firstFile,
+          { selectedSheets: selectedExcelSheets.length > 0 ? selectedExcelSheets : undefined },
+          (p, s) => {
+            setProgressPercent(p);
+            setProgressStatus(s);
+          }
+        );
+        const url = URL.createObjectURL(res.blob);
+        setResultBlob(res.blob);
+        setResultUrl(url);
+        setResultFileName(res.fileName);
+        setResultMetadata({ sheets: res.sheetCount, pages: res.pageCount });
+
+        recordOperation('excel-to-pdf', 'Excel to PDF', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
+      } else if (tool.id === 'word-to-pdf') {
+        const res = await convertWordToPdfEngine(firstFile, (p, s) => {
+          setProgressPercent(p);
+          setProgressStatus(s);
+        });
+        const url = URL.createObjectURL(res.blob);
+        setResultBlob(res.blob);
+        setResultUrl(url);
+        setResultFileName(res.fileName);
+        setResultMetadata({ pages: res.pageCount });
+
+        recordOperation('word-to-pdf', 'Word to PDF', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
+      } else if (tool.id === 'ppt-to-pdf') {
+        const res = await convertPptToPdf(firstFile, (p, s) => {
+          setProgressPercent(p);
+          setProgressStatus(s);
+        });
+        const url = URL.createObjectURL(res.blob);
+        setResultBlob(res.blob);
+        setResultUrl(url);
+        setResultFileName(res.fileName);
+        setResultMetadata({ slides: res.slideCount });
+
+        recordOperation('ppt-to-pdf', 'PowerPoint to PDF', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
       } else if (tool.id === 'pdf-to-word') {
         const res = await pdfToWord(firstFile, (p, s) => {
           setProgressPercent(p);
@@ -307,17 +404,6 @@ export const ToolWorkspace: React.FC = () => {
         setResultMetadata({ words: res.wordCount });
 
         recordOperation('pdf-to-word', 'PDF to Word', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
-      } else if (tool.id === 'word-to-pdf') {
-        const res = await wordToPdf(firstFile, (p, s) => {
-          setProgressPercent(p);
-          setProgressStatus(s);
-        });
-        const url = URL.createObjectURL(res.blob);
-        setResultBlob(res.blob);
-        setResultUrl(url);
-        setResultFileName(res.fileName);
-
-        recordOperation('word-to-pdf', 'Word to PDF', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
       } else if (tool.id === 'image-converter') {
         const res = await processImageFile(
           firstFile,
@@ -486,14 +572,14 @@ export const ToolWorkspace: React.FC = () => {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 text-[11px] font-extrabold uppercase mb-2">
-                <span>{tool.category.toUpperCase()} TOOL</span>
+                <span>{getCategoryLabel(tool.category)}</span>
                 {tool.badge && <span>• {tool.badge}</span>}
               </div>
               <h1 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-                {tool.name}
+                {getToolTitle(tool.id, tool.name)}
               </h1>
               <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 mt-1">
-                {tool.tagline}
+                {getToolTagline(tool.id, tool.tagline)}
               </p>
             </div>
 
@@ -506,7 +592,7 @@ export const ToolWorkspace: React.FC = () => {
               >
                 {TOOLS_LIST.map((t) => (
                   <option key={t.id} value={t.id}>
-                    {t.name}
+                    {getToolTitle(t.id, t.name)}
                   </option>
                 ))}
               </select>
@@ -532,14 +618,17 @@ export const ToolWorkspace: React.FC = () => {
               onClick={() => fileInputRef.current?.click()}
               className="p-8 rounded-3xl border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-indigo-500 dark:hover:border-indigo-400 bg-white/60 dark:bg-slate-900/60 hover:bg-indigo-50/20 dark:hover:bg-indigo-950/20 text-center transition-all cursor-pointer shadow-xs"
             >
-              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-3">
+              <div className="w-14 h-14 rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center mx-auto mb-2">
                 <UploadCloud className="w-7 h-7" />
               </div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 border border-indigo-200/60 dark:border-indigo-800/60 text-indigo-700 dark:text-indigo-300 font-bold text-xs mb-2">
+                <span>{t('hero_action_upload_btn', undefined, 'Déposer vos fichiers ou commencer la conversion')}</span>
+              </div>
               <p className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                Click or drag & drop files here
+                {t('workspace_drop_zone_title')} {t('workspace_drop_zone_browse')}
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-                Accepted: {tool.acceptedFormats} (Max {isUnlimited ? tool.maxFilesPro : tool.maxFilesFree} files, up to {isUnlimited ? '200MB' : '15MB'})
+                {t('conv_accepts')} {tool.acceptedFormats} ({t('workspace_drop_zone_limit', { max: isUnlimited ? tool.maxFilesPro : tool.maxFilesFree, size: isUnlimited ? '200' : '15' })})
               </p>
             </div>
 
@@ -548,13 +637,13 @@ export const ToolWorkspace: React.FC = () => {
               <div className="p-5 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800/80 shadow-md">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-                    Selected Files ({selectedFiles.length})
+                    {t('workspace_selected_files', { count: selectedFiles.length })}
                   </h3>
                   <button
                     onClick={() => setSelectedFiles([])}
                     className="text-xs font-semibold text-rose-600 hover:underline cursor-pointer"
                   >
-                    Clear All
+                    {t('workspace_clear_files')}
                   </button>
                 </div>
 
@@ -691,6 +780,111 @@ export const ToolWorkspace: React.FC = () => {
                       <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">{p.desc}</p>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {tool.id === 'pdf-to-excel' && (
+                <div className="space-y-3 text-left">
+                  <div className="p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40">
+                    <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                      <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                      <span>Table Detection & Extraction</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                      Extracts tables and multi-page grids with auto-fitting column widths and numeric cell typing into standard Excel (.xlsx) workbooks.
+                    </p>
+                  </div>
+                  <div className="text-[11px] space-y-1 text-slate-500 dark:text-slate-400">
+                    <p>✓ Multi-column table recognition</p>
+                    <p>✓ Automated column auto-fit spacing</p>
+                    <p>✓ Formulas & financial summaries preserved</p>
+                  </div>
+                </div>
+              )}
+
+              {tool.id === 'excel-to-pdf' && (
+                <div className="space-y-4 text-left">
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                        Choose Worksheets ({selectedExcelSheets.length}/{excelSheets.length})
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedExcelSheets(excelSheets)}
+                        className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
+                      >
+                        Select All
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                      {excelSheets.map((s) => {
+                        const isChecked = selectedExcelSheets.includes(s);
+                        return (
+                          <label
+                            key={s}
+                            className={`flex items-center justify-between px-3 py-2 rounded-xl border text-xs cursor-pointer transition-colors ${
+                              isChecked
+                                ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-300 dark:border-teal-800 text-teal-900 dark:text-teal-200 font-bold'
+                                : 'bg-slate-50 dark:bg-slate-800/60 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400'
+                            }`}
+                          >
+                            <span className="truncate">{s}</span>
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedExcelSheets([...selectedExcelSheets, s]);
+                                } else {
+                                  setSelectedExcelSheets(selectedExcelSheets.filter((x) => x !== s));
+                                }
+                              }}
+                              className="rounded text-teal-600 focus:ring-teal-500"
+                            />
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="p-3 rounded-xl bg-teal-50/50 dark:bg-teal-950/20 border border-teal-200/60 dark:border-teal-900/30 text-[11px] text-teal-800 dark:text-teal-300">
+                    Auto-Fit Page Width is enabled: Tables scale automatically without column clipping.
+                  </div>
+                </div>
+              )}
+
+              {tool.id === 'ppt-to-pdf' && (
+                <div className="space-y-3 text-left">
+                  <div className="p-3.5 rounded-2xl bg-orange-50/60 dark:bg-orange-950/30 border border-orange-200 dark:border-orange-900/40">
+                    <div className="flex items-center gap-2 text-orange-800 dark:text-orange-300 font-bold text-xs">
+                      <Presentation className="w-4 h-4 text-orange-600" />
+                      <span>16:9 Widescreen Deck Output</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                      Converts PowerPoint decks (.pptx, .ppt) to universal landscape PDF documents while maintaining slide sequencing, vectors, and graphics.
+                    </p>
+                  </div>
+                  <div className="text-[11px] space-y-1 text-slate-500 dark:text-slate-400">
+                    <p>✓ High-resolution landscape format</p>
+                    <p>✓ Multi-slide deck preservation</p>
+                    <p>✓ Embedded media & vector fonts</p>
+                  </div>
+                </div>
+              )}
+
+              {tool.id === 'word-to-pdf' && (
+                <div className="space-y-3 text-left">
+                  <div className="p-3.5 rounded-2xl bg-sky-50/60 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-900/40">
+                    <div className="flex items-center gap-2 text-sky-800 dark:text-sky-300 font-bold text-xs">
+                      <FileType className="w-4 h-4 text-sky-600" />
+                      <span>High Fidelity Word Parsing</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                      Converts DOCX and DOC documents into print-optimized PDF with formatted tables, images, headings, and margins.
+                    </p>
+                  </div>
                 </div>
               )}
 
@@ -969,12 +1163,12 @@ export const ToolWorkspace: React.FC = () => {
                 {isProcessing ? (
                   <>
                     <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Processing Document...</span>
+                    <span>{t('workspace_processing')}</span>
                   </>
                 ) : (
                   <>
                     <Zap className="w-4 h-4" />
-                    <span>Execute {tool.name}</span>
+                    <span>{t('workspace_process_button')} ({getToolTitle(tool.id, tool.name)})</span>
                   </>
                 )}
               </button>
@@ -984,7 +1178,7 @@ export const ToolWorkspace: React.FC = () => {
                 <div className="mt-6 p-5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-left animate-in fade-in-50">
                   <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs mb-2">
                     <CheckCircle className="w-4 h-4 text-emerald-600" />
-                    <span>Ready for Download!</span>
+                    <span>{t('workspace_success_title')}</span>
                   </div>
 
                   <p className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate mb-3">
@@ -997,7 +1191,7 @@ export const ToolWorkspace: React.FC = () => {
                     className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition-all"
                   >
                     <Download className="w-4 h-4" />
-                    <span>Download File ({(resultBlob?.size ? resultBlob.size / 1024 / 1024 : 0.5).toFixed(2)} MB)</span>
+                    <span>{t('workspace_download_button')} ({(resultBlob?.size ? resultBlob.size / 1024 / 1024 : 0.5).toFixed(2)} MB)</span>
                   </a>
                 </div>
               )}
