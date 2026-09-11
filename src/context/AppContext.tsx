@@ -32,7 +32,7 @@ interface AppContextType {
   setUser: React.Dispatch<React.SetStateAction<UserProfile>>;
   login: (email: string, password?: string) => void;
   register: (name: string, email: string) => void;
-  loginAdmin: (email: string, password: string) => boolean;
+  loginAdmin: (email: string, password: string) => Promise<boolean> | boolean;
   loginAs: (role: 'free' | 'pro' | 'business' | 'admin') => void;
   logout: () => void;
   isAuthModalOpen: boolean;
@@ -86,14 +86,13 @@ interface AppContextType {
 }
 
 const DEFAULT_USER: UserProfile = {
-  id: 'usr_free_8921',
-  name: 'Alex Morgan',
-  email: 'alex.morgan@example.com',
-  avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+  id: 'usr_guest_01',
+  name: 'Utilisateur DocuPulse',
+  email: 'user@docupulse.io',
   role: 'user',
   plan: 'free',
   billingCycle: 'monthly',
-  memberSince: 'March 2026',
+  memberSince: '2026',
   apiKey: 'dp_live_k8f934j2091m38x',
 };
 
@@ -101,38 +100,35 @@ export const DEMO_USERS = {
   free: DEFAULT_USER,
   pro: {
     id: 'usr_pro_1033',
-    name: 'Sarah Connor',
-    email: 'sarah.connor@designstudio.io',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80',
+    name: 'Compte Pro Démo',
+    email: 'pro@docupulse.io',
     role: 'pro' as const,
     plan: 'pro' as const,
     billingCycle: 'annual' as const,
-    memberSince: 'January 2026',
+    memberSince: '2026',
     apiKey: 'dp_live_pro_9918237192837',
     subscriptionEndDate: '2027-01-15',
   },
   business: {
     id: 'usr_biz_501',
-    name: 'David Vance',
-    email: 'david@enterprise-apex.com',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80',
+    name: 'Entreprise Apex Tech',
+    email: 'contact@apextech.com',
     role: 'business' as const,
     plan: 'business' as const,
     billingCycle: 'annual' as const,
-    memberSince: 'November 2025',
-    organization: 'Apex Digital Global Inc.',
+    memberSince: '2026',
+    organization: 'Apex Tech Solutions',
     apiKey: 'dp_live_ent_558833991122',
     subscriptionEndDate: '2027-03-01',
   },
   admin: {
     id: 'usr_admin_001',
-    name: 'Camara Badra Ali (Administrator)',
+    name: 'Camara Badra Ali (Administrateur)',
     email: 'admin@docupulse.io',
-    avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
     role: 'admin' as const,
     plan: 'business' as const,
     billingCycle: 'annual' as const,
-    memberSince: 'September 2025',
+    memberSince: '2026',
     apiKey: 'dp_root_admin_master_superkey_2026',
   },
 };
@@ -144,67 +140,12 @@ const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   maxFreeFileSizeMb: 15,
   maxProFileSizeMb: 200,
   enableAiOcr: true,
-  announcementBanner: '🚀 Launch Special: Get 50% off DocuPulse Pro with code LAUNCH50 at checkout!',
+  announcementBanner: '✨ DocuPulse Pro : Profitez de la conversion illimitée haute vitesse sans restriction.',
 };
 
-const INITIAL_INVOICES: Invoice[] = [
-  {
-    id: 'inv_8901',
-    invoiceNumber: 'INV-2026-0089',
-    date: '2026-08-01',
-    amount: 9.0,
-    plan: 'Pro Plan (Monthly)',
-    status: 'Paid',
-    paymentMethod: 'Visa •••• 4242',
-  },
-  {
-    id: 'inv_8722',
-    invoiceNumber: 'INV-2026-0072',
-    date: '2026-07-01',
-    amount: 9.0,
-    plan: 'Pro Plan (Monthly)',
-    status: 'Paid',
-    paymentMethod: 'Visa •••• 4242',
-  },
-];
+const INITIAL_INVOICES: Invoice[] = [];
 
-const INITIAL_HISTORY: HistoryItem[] = [
-  {
-    id: 'hist_1',
-    toolId: 'merge-pdf',
-    toolName: 'Merge PDF',
-    fileName: 'Quarterly_Report_Q1_Q2.pdf',
-    fileSize: 4200000,
-    outputFileName: 'Quarterly_Report_Merged.pdf',
-    outputSize: 3900000,
-    timestamp: Date.now() - 1000 * 60 * 45,
-    status: 'completed',
-    pagesOrCount: 14,
-  },
-  {
-    id: 'hist_2',
-    toolId: 'compress-pdf',
-    toolName: 'Compress PDF',
-    fileName: 'Product_Catalog_2026_HighRes.pdf',
-    fileSize: 18500000,
-    outputFileName: 'Product_Catalog_2026_Compressed.pdf',
-    outputSize: 6200000,
-    timestamp: Date.now() - 1000 * 60 * 180,
-    status: 'completed',
-    pagesOrCount: 32,
-  },
-  {
-    id: 'hist_3',
-    toolId: 'image-converter',
-    toolName: 'Image Converter',
-    fileName: 'Hero_Banner_Visual.png',
-    fileSize: 3100000,
-    outputFileName: 'Hero_Banner_Optimized.webp',
-    outputSize: 420000,
-    timestamp: Date.now() - 1000 * 60 * 360,
-    status: 'completed',
-  },
-];
+const INITIAL_HISTORY: HistoryItem[] = [];
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
@@ -407,7 +348,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Check if current user can perform a tool operation (3 operations free daily limit)
+  // Synchronize Authoritative Quota with Server API upon mount and user change
+  useEffect(() => {
+    const fetchServerQuota = async () => {
+      try {
+        const token = user.apiKey || localStorage.getItem('docupulse_token');
+        const headers: Record<string, string> = {};
+        if (token) {
+          headers['Authorization'] = `Bearer ${token}`;
+        }
+        const res = await fetch('/api/user/quota', { headers });
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.authoritative) {
+            setQuota((prev) => ({
+              ...prev,
+              usedToday: data.usedToday,
+              limitToday: data.dailyLimit,
+              date: new Date().toISOString().split('T')[0],
+            }));
+          }
+        }
+      } catch (err) {
+        console.warn('Server quota sync fallback to local cache:', err);
+      }
+    };
+    fetchServerQuota();
+  }, [user.plan, user.apiKey]);
+
+  // Check if current user can perform a tool operation (authoritative 3 operations free daily limit)
   const checkCanPerformOperation = (): boolean => {
     if (user.plan === 'pro' || user.plan === 'business' || user.role === 'admin') {
       return true; // Unlimited
@@ -431,7 +400,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return true;
   };
 
-  // Record a completed operation
+  // Record a completed operation with server authoritative consumption
   const recordOperation = (
     toolId: ToolId,
     toolName: string,
@@ -445,16 +414,48 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const today = new Date().toISOString().split('T')[0];
     const savedBytes = Math.max(0, fileSize - outputSize);
 
-    setQuota((prev) => {
-      const isSameDay = prev.date === today;
-      return {
-        date: today,
-        usedToday: (isSameDay ? prev.usedToday : 0) + 1,
-        limitToday: user.plan === 'free' ? systemSettings.freeDailyLimit : 999999,
-        totalLifetimeOperations: prev.totalLifetimeOperations + 1,
-        totalBytesSaved: prev.totalBytesSaved + savedBytes,
-      };
-    });
+    // Call server to consume quota authoritatively
+    const token = user.apiKey || localStorage.getItem('docupulse_token');
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+
+    fetch('/api/user/quota/consume', { method: 'POST', headers })
+      .then(async (res) => {
+        if (res.ok) {
+          const data = await res.json();
+          setQuota((prev) => ({
+            ...prev,
+            date: today,
+            usedToday: data.usedToday,
+            totalLifetimeOperations: prev.totalLifetimeOperations + 1,
+            totalBytesSaved: prev.totalBytesSaved + savedBytes,
+          }));
+        } else {
+          // Update local state if server returned failure or offline
+          setQuota((prev) => {
+            const isSameDay = prev.date === today;
+            return {
+              ...prev,
+              date: today,
+              usedToday: (isSameDay ? prev.usedToday : 0) + 1,
+              totalLifetimeOperations: prev.totalLifetimeOperations + 1,
+              totalBytesSaved: prev.totalBytesSaved + savedBytes,
+            };
+          });
+        }
+      })
+      .catch(() => {
+        setQuota((prev) => {
+          const isSameDay = prev.date === today;
+          return {
+            ...prev,
+            date: today,
+            usedToday: (isSameDay ? prev.usedToday : 0) + 1,
+            totalLifetimeOperations: prev.totalLifetimeOperations + 1,
+            totalBytesSaved: prev.totalBytesSaved + savedBytes,
+          };
+        });
+      });
 
     const newHistoryItem: HistoryItem = {
       id: 'hist_' + Date.now(),
@@ -484,44 +485,66 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Upgrade subscription flow
-  const upgradeSubscription = (plan: UserPlan, billingCycle: 'monthly' | 'annual' = 'monthly') => {
+  const upgradeSubscription = async (plan: UserPlan, billingCycle: 'monthly' | 'annual' = 'monthly') => {
     const planName = plan === 'pro' ? 'DocuPulse Pro' : 'Enterprise & Teams';
     const amount = plan === 'pro' ? (billingCycle === 'annual' ? 84.0 : 9.0) : (billingCycle === 'annual' ? 228.0 : 24.0);
 
-    setUser((prev) => ({
-      ...prev,
-      plan,
-      role: plan === 'pro' ? 'pro' : 'business',
-      billingCycle,
-      subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
-    }));
-
-    const newInvoice: Invoice = {
-      id: 'inv_' + Date.now(),
-      invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
-      date: new Date().toISOString().split('T')[0],
-      amount,
-      plan: plan === 'pro' ? (billingCycle === 'annual' ? 'Pro Plan (Annual)' : 'Pro Plan (Monthly)') : (billingCycle === 'annual' ? 'Business Plan (Annual)' : 'Business Plan (Monthly)'),
-      status: 'Paid',
-      paymentMethod: 'Mastercard •••• 8842',
-    };
-
-    setInvoices((prev) => [newInvoice, ...prev]);
-    setIsUpgradeModalOpen(false);
-
-    // Trigger celebratory confetti
     try {
-      confetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#6366f1', '#ec4899', '#3b82f6', '#10b981', '#f59e0b'],
+      const token = localStorage.getItem('docupulse_token');
+      const res = await fetch('/api/billing/create-checkout-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({ plan, billingInterval: billingCycle }),
       });
-    } catch {
-      // ignore
-    }
 
-    showToast('success', `Welcome to ${planName}!`, 'Your account now has unlimited operations, batch processing, and AI tools active.');
+      const data = await res.json();
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      // If in sandbox mode without live keys:
+      setUser((prev) => ({
+        ...prev,
+        plan,
+        role: plan === 'pro' ? 'pro' : 'business',
+        billingCycle,
+        subscriptionEndDate: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toLocaleDateString(),
+      }));
+
+      const newInvoice: Invoice = {
+        id: 'inv_' + Date.now(),
+        invoiceNumber: `INV-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: new Date().toISOString().split('T')[0],
+        amount,
+        plan: plan === 'pro' ? (billingCycle === 'annual' ? 'Pro Plan (Annual)' : 'Pro Plan (Monthly)') : (billingCycle === 'annual' ? 'Business Plan (Annual)' : 'Business Plan (Monthly)'),
+        status: 'Paid',
+        paymentMethod: 'Mastercard •••• 8842',
+      };
+
+      setInvoices((prev) => [newInvoice, ...prev]);
+      setIsUpgradeModalOpen(false);
+
+      // Trigger celebratory confetti
+      try {
+        confetti({
+          particleCount: 120,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#6366f1', '#ec4899', '#3b82f6', '#10b981', '#f59e0b'],
+        });
+      } catch {
+        // ignore
+      }
+
+      showToast('success', `Welcome to ${planName}!`, data.message || 'Your account now has unlimited operations, batch processing, and AI tools active.');
+    } catch {
+      showToast('error', 'Checkout Error', 'Unable to reach payment gateway.');
+    }
   };
 
   // User standard login
@@ -569,33 +592,46 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     showToast('success', 'Account Created', `Welcome to DocuPulse, ${name}! You have 3 free operations daily.`);
   };
 
-  // Admin-only authentication with credentials
-  const loginAdmin = (email: string, password: string): boolean => {
-    const validEmails = ['admin@docupulse.io', 'camarabadraalicamara@gmail.com'];
-    const validPasswords = ['Admin@DocuPulse2026!', 'admin123', 'admin2026'];
-
-    const isEmailValid = validEmails.includes(email.trim().toLowerCase());
-    const isPasswordValid = validPasswords.includes(password.trim());
-
-    if (isEmailValid && isPasswordValid) {
-      setUser({
-        id: 'usr_admin_001',
-        name: 'Camara Badra Ali (Administrator)',
-        email: email.trim().toLowerCase(),
-        avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
-        role: 'admin',
-        plan: 'business',
-        billingCycle: 'annual',
-        memberSince: 'September 2025',
-        apiKey: 'dp_root_admin_master_superkey_2026',
+  // Admin authentication with server verification
+  const loginAdmin = async (email: string, password: string): Promise<boolean> => {
+    try {
+      const response = await fetch('/api/auth/session', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim(), password: password.trim() }),
       });
 
-      setIsAuthModalOpen(false);
-      setCurrentView('admin');
-      showToast('success', 'Admin Access Granted', 'Authenticated as System Administrator. Admin Panel opened.');
-      return true;
-    } else {
-      showToast('error', 'Authentication Failed', 'Invalid admin email or password. Access denied.');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        showToast('error', 'Authentication Failed', errData.error || 'Invalid admin email or password. Access denied.');
+        return false;
+      }
+
+      const data = await response.json();
+      if (data.token && data.user) {
+        localStorage.setItem('docupulse_token', data.token);
+        setUser({
+          id: data.user.id,
+          name: 'Camara Badra Ali (Administrator)',
+          email: data.user.email,
+          avatar: 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&auto=format&fit=crop&q=80',
+          role: 'admin',
+          plan: 'business',
+          billingCycle: 'annual',
+          memberSince: 'September 2025',
+          apiKey: data.token,
+        });
+
+        setIsAuthModalOpen(false);
+        setCurrentView('admin');
+        showToast('success', 'Admin Access Granted', 'Authenticated as System Administrator. Admin Panel opened.');
+        return true;
+      }
+
+      showToast('error', 'Authentication Failed', 'Invalid admin authentication response.');
+      return false;
+    } catch {
+      showToast('error', 'Authentication Error', 'Unable to reach authentication server.');
       return false;
     }
   };

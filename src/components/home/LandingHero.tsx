@@ -11,6 +11,7 @@ import {
   Layers,
   Minimize2,
   CheckCircle,
+  Lock,
 } from 'lucide-react';
 
 export const LandingHero: React.FC = () => {
@@ -175,37 +176,52 @@ export const LandingHero: React.FC = () => {
           ))}
         </div>
 
-        {/* Trust & Metric Statistics */}
+        {/* Enterprise Privacy & Technical Architecture Guarantees */}
         <div className="mt-14 pt-8 border-t border-slate-200/80 dark:border-slate-800/80 grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {t('hero_stat_docs_count')}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60">
+            <div className="flex items-center gap-2 mb-1">
+              <Shield className="w-4 h-4 text-emerald-500 shrink-0" />
+              <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                {t('hero_stat_docs_count')}
+              </p>
+            </div>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">
               {t('hero_stat_docs_label')}
             </p>
           </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {t('hero_stat_sla_count')}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60">
+            <div className="flex items-center gap-2 mb-1">
+              <Layers className="w-4 h-4 text-indigo-500 shrink-0" />
+              <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                {t('hero_stat_sla_count')}
+              </p>
+            </div>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">
               {t('hero_stat_sla_label')}
             </p>
           </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {t('hero_stat_speed_count')}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60">
+            <div className="flex items-center gap-2 mb-1">
+              <Zap className="w-4 h-4 text-amber-500 shrink-0" />
+              <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                {t('hero_stat_speed_count')}
+              </p>
+            </div>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">
               {t('hero_stat_speed_label')}
             </p>
           </div>
-          <div>
-            <p className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white">
-              {t('hero_stat_security_count')}
-            </p>
-            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium mt-0.5">
+
+          <div className="flex flex-col items-center sm:items-start text-center sm:text-left p-3 rounded-2xl bg-white/40 dark:bg-slate-900/40 border border-slate-200/60 dark:border-slate-800/60">
+            <div className="flex items-center gap-2 mb-1">
+              <Lock className="w-4 h-4 text-violet-500 shrink-0" />
+              <p className="text-base sm:text-lg font-extrabold text-slate-900 dark:text-white">
+                {t('hero_stat_security_count')}
+              </p>
+            </div>
+            <p className="text-[11px] sm:text-xs text-slate-500 dark:text-slate-400 font-medium">
               {t('hero_stat_security_label')}
             </p>
           </div>

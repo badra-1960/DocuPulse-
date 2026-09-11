@@ -465,14 +465,14 @@ export const UserDashboard: React.FC = () => {
                   }`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-slate-200 dark:bg-slate-700 flex items-center justify-center font-bold text-slate-700 dark:text-slate-300 shrink-0">
-                    AM
+                    FR
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">Alex Morgan</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">Gratuit / Starter</span>
                       <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">Free</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">alex.morgan@example.com (3 ops/day)</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">user@docupulse.io (3 ops/jour)</p>
                   </div>
                 </button>
 
@@ -486,14 +486,14 @@ export const UserDashboard: React.FC = () => {
                   }`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-indigo-100 dark:bg-indigo-900/60 flex items-center justify-center font-bold text-indigo-700 dark:text-indigo-300 shrink-0">
-                    SC
+                    PR
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">Sarah Connor</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">Compte Pro</span>
                       <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">Pro</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">sarah.connor@designstudio.io (Unlimited)</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">pro@docupulse.io (Illimité)</p>
                   </div>
                 </button>
 
@@ -507,14 +507,14 @@ export const UserDashboard: React.FC = () => {
                   }`}
                 >
                   <div className="w-10 h-10 rounded-xl bg-purple-100 dark:bg-purple-900/60 flex items-center justify-center font-bold text-purple-700 dark:text-purple-300 shrink-0">
-                    DV
+                    BZ
                   </div>
                   <div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-xs font-bold text-slate-900 dark:text-white">David Vance</span>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">Business Enterprise</span>
                       <span className="text-[10px] font-bold px-1.5 py-0.2 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300">Business</span>
                     </div>
-                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Apex Digital Global Inc. (10 seats)</p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">Apex Tech Solutions (10 sièges)</p>
                   </div>
                 </button>
 

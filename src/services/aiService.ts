@@ -43,22 +43,18 @@ export async function extractDocumentWithAi(
     });
 
     if (!response.ok) {
-      throw new Error(`AI Service returned status ${response.status}`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData?.details || errData?.error || `AI Service returned status ${response.status}`);
     }
 
     const data = await response.json();
     return data;
   } catch (error: any) {
-    console.warn('AI OCR Network request failed, using client-side fallback:', error);
-    // Fallback response for offline or non-API key modes
+    console.error('AI OCR processing error:', error);
     return {
-      success: true,
-      text: `# Extracted Document Content\n\n**Processed via DocuPulse AI Intelligence Engine**\n\n### Document Overview\n- **Status:** Scanned & Processed\n- **Target Task:** ${task.toUpperCase()}\n- **Selected Language:** ${language}\n\n### Extracted Body Text\nLorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.\n\n### Structured Key Points\n1. High-accuracy text segmentation completed.\n2. Font weight and headings preserved.\n3. Ready for export to DOCX, TXT, or Clipboard.`,
-      metadata: {
-        words: 78,
-        languageDetected: language,
-        confidence: 0.98,
-      },
+      success: false,
+      text: '',
+      error: error?.message || 'Failed to extract text from document with AI.',
     };
   }
 }
@@ -67,7 +63,7 @@ export async function analyzeDocumentText(
   text: string,
   action: 'summarize' | 'translate' | 'proofread' | 'extract_action_items' = 'summarize',
   targetLanguage: string = 'Spanish'
-): Promise<{ success: boolean; result: string }> {
+): Promise<{ success: boolean; result: string; error?: string }> {
   try {
     const response = await fetch('/api/ai/analyze-text', {
       method: 'POST',
@@ -76,15 +72,18 @@ export async function analyzeDocumentText(
     });
 
     if (!response.ok) {
-      throw new Error(`AI text analysis failed (${response.status})`);
+      const errData = await response.json().catch(() => ({}));
+      throw new Error(errData?.details || errData?.error || `AI text analysis failed (${response.status})`);
     }
 
     const data = await response.json();
     return data;
   } catch (err: any) {
+    console.error('AI text analysis error:', err);
     return {
-      success: true,
-      result: `### Summary & Insights\n\n- The input text comprises key instructions and operational paragraphs.\n- All critical information has been categorized.\n- Recommended next step: Export to Word or PDF.`,
+      success: false,
+      result: '',
+      error: err?.message || 'Failed to analyze text with AI service.',
     };
   }
 }

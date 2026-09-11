@@ -26,13 +26,13 @@ export const AuthModal: React.FC = () => {
     t,
   } = useApp();
 
-  const [name, setName] = useState('Alex Morgan');
-  const [email, setEmail] = useState('alex.morgan@example.com');
-  const [password, setPassword] = useState('password123');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
 
   // Admin Portal specific state
-  const [adminEmail, setAdminEmail] = useState('admin@docupulse.io');
-  const [adminPassword, setAdminPassword] = useState('Admin@DocuPulse2026!');
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
   const [adminError, setAdminError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
@@ -42,14 +42,14 @@ export const AuthModal: React.FC = () => {
 
   if (!isAuthModalOpen) return null;
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setAdminError(null);
 
-    setTimeout(() => {
+    try {
       if (authModalTab === 'admin') {
-        const success = loginAdmin(adminEmail, adminPassword);
+        const success = await loginAdmin(adminEmail, adminPassword);
         if (!success) {
           setAdminError('Invalid administrator email or master password. Access rejected.');
         }
@@ -58,15 +58,15 @@ export const AuthModal: React.FC = () => {
       } else {
         register(name, email);
       }
+    } finally {
       setIsLoading(false);
-    }, 450);
+    }
   };
 
   const handleFillAdminCredentials = () => {
     setAdminEmail('admin@docupulse.io');
-    setAdminPassword('Admin@DocuPulse2026!');
     setAdminError(null);
-    showToast('info', 'Credentials Loaded', 'Admin credentials populated.');
+    showToast('info', 'Admin Email Loaded', 'Administrator email populated. Please enter your authorized password.');
   };
 
   return (
@@ -212,18 +212,18 @@ export const AuthModal: React.FC = () => {
                 )}
               </button>
 
-              {/* Admin Credentials Reference Card */}
+              {/* Admin Access Reference Card */}
               <div className="mt-4 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[10px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-                    {t('auth_admin_creds_title')}
+                    Administrator Account
                   </span>
                   <button
                     type="button"
                     onClick={handleFillAdminCredentials}
                     className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 hover:underline cursor-pointer"
                   >
-                    {t('auth_auto_fill')}
+                    Pré-remplir l'email
                   </button>
                 </div>
                 <div className="space-y-1 text-xs font-mono">
@@ -233,7 +233,7 @@ export const AuthModal: React.FC = () => {
                   </div>
                   <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
                     <span className="text-slate-400">Password:</span>
-                    <span className="font-bold text-rose-600 dark:text-rose-400">Admin@DocuPulse2026!</span>
+                    <span className="font-bold text-slate-500">••••••••••••••••</span>
                   </div>
                 </div>
               </div>

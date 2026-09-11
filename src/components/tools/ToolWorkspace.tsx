@@ -442,6 +442,10 @@ export const ToolWorkspace: React.FC = () => {
         setProgressStatus('Scanning visual document with Gemini AI...');
 
         const aiRes = await extractDocumentWithAi(firstFile, aiTask, aiLanguage);
+        if (!aiRes.success) {
+          throw new Error(aiRes.error || 'Failed to extract text from document using AI.');
+        }
+
         setProgressPercent(90);
         setProgressStatus('Formatting extracted text...');
 

@@ -35,10 +35,10 @@ export const UpgradeModal: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   // Form states
-  const [cardNumber, setCardNumber] = useState('4242 •••• •••• 4242');
-  const [cardExpiry, setCardExpiry] = useState('12/28');
-  const [cardCvc, setCardCvc] = useState('888');
-  const [cardName, setCardName] = useState(user.name || 'Alex Morgan');
+  const [cardNumber, setCardNumber] = useState('');
+  const [cardExpiry, setCardExpiry] = useState('');
+  const [cardCvc, setCardCvc] = useState('');
+  const [cardName, setCardName] = useState(user.name || '');
 
   if (!isUpgradeModalOpen) return null;
 
