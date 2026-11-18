@@ -16,6 +16,7 @@ import { FaqSection } from './components/home/FaqSection';
 import { ToolWorkspace } from './components/tools/ToolWorkspace';
 import { UserDashboard } from './components/dashboard/UserDashboard';
 import { AdminPanel } from './components/admin/AdminPanel';
+import { LegalPages } from './components/legal/LegalPages';
 import { UpgradeModal } from './components/common/UpgradeModal';
 import { AuthModal } from './components/common/AuthModal';
 import { CommandPalette } from './components/common/CommandPalette';
@@ -52,6 +53,8 @@ const MainContent: React.FC = () => {
         )}
 
         {currentView === 'admin' && <AdminPanel />}
+
+        {currentView === 'legal' && <LegalPages />}
       </main>
 
       <Footer />

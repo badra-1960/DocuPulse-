@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { TOOLS_LIST } from '../../data/toolsData';
 import { ToolId } from '../../types';
@@ -13,12 +13,14 @@ import {
   watermarkPdf,
   addPageNumbers,
   rotatePdfPages,
+  normalizePdfError,
 } from '../../services/pdfEngine';
 import {
   convertPdfToExcel,
   convertWordToPdf as convertWordToPdfEngine,
   convertPptToPdf,
   convertExcelToPdf,
+  convertDocumentToMarkdown,
   getExcelSheetNames,
   createZipArchive,
 } from '../../services/conversionEngine';
@@ -53,6 +55,7 @@ import {
   FileSpreadsheet,
   Presentation,
   Archive,
+  FileCode,
 } from 'lucide-react';
 
 export const ToolWorkspace: React.FC = () => {
@@ -101,6 +104,19 @@ export const ToolWorkspace: React.FC = () => {
   const [resultFileName, setResultFileName] = useState<string>('');
   const [resultMetadata, setResultMetadata] = useState<Record<string, any>>({});
   const [copiedText, setCopiedText] = useState(false);
+
+  useEffect(() => {
+    setSelectedFiles([]);
+    setResultBlob(null);
+    setResultUrl(null);
+    setResultFileName('');
+    setResultMetadata({});
+    setRenderedPages([]);
+    setAiExtractedText('');
+    setMarkdownOutput('');
+    setProgressPercent(0);
+    setProgressStatus('');
+  }, [activeToolId]);
 
   // Tool Specific Options
   // Split
@@ -151,9 +167,13 @@ export const ToolWorkspace: React.FC = () => {
   // Rotate PDF
   const [pdfRotateDegrees, setPdfRotateDegrees] = useState<number>(90);
 
-  // Conversion Options (Excel, PPT, Word)
+  // Conversion Options (Excel, PPT, Word, Markdown)
   const [excelSheets, setExcelSheets] = useState<string[]>(['Sheet1']);
   const [selectedExcelSheets, setSelectedExcelSheets] = useState<string[]>(['Sheet1']);
+  const [mdIncludeFrontmatter, setMdIncludeFrontmatter] = useState<boolean>(false);
+  const [mdIncludePageMarkers, setMdIncludePageMarkers] = useState<boolean>(true);
+  const [mdAllowOcrFallback, setMdAllowOcrFallback] = useState<boolean>(true);
+  const [markdownOutput, setMarkdownOutput] = useState<string>('');
 
   // File Upload Handlers
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -162,7 +182,7 @@ export const ToolWorkspace: React.FC = () => {
       const isUnlimited = user.plan === 'pro' || user.plan === 'business' || user.role === 'admin';
       const maxAllowed = isUnlimited ? tool.maxFilesPro : tool.maxFilesFree;
 
-      if (tool.id === 'merge-pdf' || tool.id === 'image-to-pdf') {
+      if (tool.id === 'merge-pdf' || tool.id === 'image-to-pdf' || tool.id === 'doc-to-markdown') {
         const combined = [...selectedFiles, ...files].slice(0, maxAllowed);
         setSelectedFiles(combined);
       } else {
@@ -174,6 +194,7 @@ export const ToolWorkspace: React.FC = () => {
       setResultUrl(null);
       setRenderedPages([]);
       setAiExtractedText('');
+      setMarkdownOutput('');
 
       const first = files[0];
       if (first && first.type.startsWith('image/')) {
@@ -288,6 +309,14 @@ export const ToolWorkspace: React.FC = () => {
           url,
           { saved: res.savedPercentage }
         );
+
+        if (res.savedPercentage <= 0) {
+          showToast(
+            'info',
+            'Document déjà optimisé',
+            'Ce document est déjà compressé de manière optimale.'
+          );
+        }
       } else if (tool.id === 'pdf-to-image') {
         const res = await pdfToImages(firstFile, imageFormat, imageDpi, (p, s) => {
           setProgressPercent(p);
@@ -404,6 +433,110 @@ export const ToolWorkspace: React.FC = () => {
         setResultMetadata({ words: res.wordCount });
 
         recordOperation('pdf-to-word', 'PDF to Word', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
+      } else if (tool.id === 'doc-to-markdown') {
+        if (selectedFiles.length === 1) {
+          const res = await convertDocumentToMarkdown(
+            firstFile,
+            {
+              includeFrontmatter: mdIncludeFrontmatter,
+              includePageMarkers: mdIncludePageMarkers,
+              allowAiOcrFallback: mdAllowOcrFallback,
+            },
+            (p, s) => {
+              setProgressPercent(p);
+              setProgressStatus(s);
+            }
+          );
+          const url = URL.createObjectURL(res.blob);
+          setResultBlob(res.blob);
+          setResultUrl(url);
+          setResultFileName(res.fileName);
+          setMarkdownOutput(res.markdown);
+          setResultMetadata({
+            words: res.wordCount,
+            lines: res.lineCount,
+            sections: res.sectionCount,
+            extractionMethod: res.extractionMethod,
+          });
+
+          recordOperation(
+            'doc-to-markdown',
+            'Document to Markdown',
+            firstFile.name,
+            firstFile.size,
+            res.fileName,
+            res.blob.size,
+            url,
+            { words: res.wordCount, extractionMethod: res.extractionMethod }
+          );
+        } else {
+          const convertedItems: {
+            name: string;
+            blob: Blob;
+            markdown: string;
+            words: number;
+            extractionMethod: 'local-text' | 'ai-ocr';
+          }[] = [];
+          for (let i = 0; i < selectedFiles.length; i++) {
+            const f = selectedFiles[i];
+            const res = await convertDocumentToMarkdown(
+              f,
+              {
+                includeFrontmatter: mdIncludeFrontmatter,
+                includePageMarkers: mdIncludePageMarkers,
+                allowAiOcrFallback: mdAllowOcrFallback,
+              },
+              (p, s) => {
+                const overall = Math.round(((i + p / 100) / selectedFiles.length) * 90);
+                setProgressPercent(overall);
+                setProgressStatus(`[${i + 1}/${selectedFiles.length}] ${s}`);
+              }
+            );
+            convertedItems.push({
+              name: res.fileName,
+              blob: res.blob,
+              markdown: res.markdown,
+              words: res.wordCount,
+              extractionMethod: res.extractionMethod,
+            });
+          }
+
+          setProgressPercent(95);
+          setProgressStatus('Création de l’archive ZIP Markdown...');
+          const zipBlob = await createZipArchive(
+            convertedItems.map((it) => ({ name: it.name, blob: it.blob })),
+            'docupulse_markdown_bundle.zip'
+          );
+          const url = URL.createObjectURL(zipBlob);
+          const outName = `docupulse_markdown_${convertedItems.length}_files.zip`;
+          setResultBlob(zipBlob);
+          setResultUrl(url);
+          setResultFileName(outName);
+          setMarkdownOutput(
+            convertedItems
+              .map((it) => `<!-- ===== ${it.name} ===== -->\n\n${it.markdown}`)
+              .join('\n\n')
+          );
+          const totalWords = convertedItems.reduce((acc, it) => acc + it.words, 0);
+          const usedOcr = convertedItems.some((it) => it.extractionMethod === 'ai-ocr');
+          setResultMetadata({
+            words: totalWords,
+            count: convertedItems.length,
+            isZip: true,
+            extractionMethod: usedOcr ? 'ai-ocr' : 'local-text',
+          });
+
+          recordOperation(
+            'doc-to-markdown',
+            'Document to Markdown',
+            `${selectedFiles.length} Documents`,
+            selectedFiles.reduce((acc, f) => acc + f.size, 0),
+            outName,
+            zipBlob.size,
+            url,
+            { count: convertedItems.length, words: totalWords }
+          );
+        }
       } else if (tool.id === 'image-converter') {
         const res = await processImageFile(
           firstFile,
@@ -438,10 +571,13 @@ export const ToolWorkspace: React.FC = () => {
 
         recordOperation('image-converter', 'Image Converter', firstFile.name, res.originalSize, outName, res.newSize, url);
       } else if (tool.id === 'ai-ocr') {
-        setProgressPercent(30);
-        setProgressStatus('Scanning visual document with Gemini AI...');
+        setProgressPercent(20);
+        setProgressStatus('Préparation du document pour l’analyse OCR IA...');
 
-        const aiRes = await extractDocumentWithAi(firstFile, aiTask, aiLanguage);
+        const aiRes = await extractDocumentWithAi(firstFile, aiTask, aiLanguage, (pct, msg) => {
+          setProgressPercent(Math.min(88, Math.max(20, pct)));
+          setProgressStatus(msg);
+        });
         if (!aiRes.success) {
           throw new Error(aiRes.error || 'Failed to extract text from document using AI.');
         }
@@ -521,13 +657,16 @@ export const ToolWorkspace: React.FC = () => {
         recordOperation('rotate-pdf', 'Rotate PDF', firstFile.name, firstFile.size, res.fileName, res.blob.size, url);
       }
 
-      showToast('success', 'Processing Completed!', `Your document has been processed and is ready for download.`);
+      showToast('success', 'Traitement terminé !', `Votre document a été traité et est prêt pour le téléchargement.`);
     } catch (err: any) {
       console.error('Tool processing error:', err);
-      showToast('error', 'Operation Failed', err?.message || 'An error occurred during document processing.');
+      const normalized = normalizePdfError(err, selectedFiles[0]?.name);
+      showToast('error', 'Échec de l\'opération', normalized.message);
+      // Reset progress bar on error so the interface is immediately reusable
+      setProgressPercent(0);
+      setProgressStatus('');
     } finally {
       setIsProcessing(false);
-      setProgressPercent(100);
     }
   };
 
@@ -612,7 +751,7 @@ export const ToolWorkspace: React.FC = () => {
             <input
               ref={fileInputRef}
               type="file"
-              multiple={tool.id === 'merge-pdf' || tool.id === 'image-to-pdf' || tool.id === 'image-converter'}
+              multiple={tool.id === 'merge-pdf' || tool.id === 'image-to-pdf' || tool.id === 'image-converter' || tool.id === 'doc-to-markdown'}
               accept={tool.acceptedFormats}
               onChange={handleFileChange}
               className="hidden"
@@ -888,6 +1027,73 @@ export const ToolWorkspace: React.FC = () => {
                     <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
                       Converts DOCX and DOC documents into print-optimized PDF with formatted tables, images, headings, and margins.
                     </p>
+                  </div>
+                </div>
+              )}
+
+              {tool.id === 'doc-to-markdown' && (
+                <div className="space-y-4 text-left">
+                  <div className="p-3.5 rounded-2xl bg-indigo-50/60 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/40">
+                    <div className="flex items-center gap-2 text-indigo-800 dark:text-indigo-300 font-bold text-xs">
+                      <FileCode className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                      <span>Export Markdown (.md)</span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-1">
+                      Extrait fidèlement titres, paragraphes, listes et tableaux GFM depuis PDF (natif ou scanné), DOCX, XLSX, CSV, PPTX, HTML, JSON, TXT ou images.
+                    </p>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mdAllowOcrFallback}
+                        onChange={(e) => setMdAllowOcrFallback(e.target.checked)}
+                        className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                          OCR IA automatique (PDF numérisés & images)
+                        </span>
+                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                          Bascule automatiquement vers l’OCR IA si le PDF ne contient aucune couche de texte ou pour convertir PNG/JPG/WebP.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mdIncludePageMarkers}
+                        onChange={(e) => setMdIncludePageMarkers(e.target.checked)}
+                        className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                          Séparateurs de pages / diapositives
+                        </span>
+                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                          Insère des titres « ## Page X » et « --- » entre les pages PDF ou slides PPTX.
+                        </span>
+                      </div>
+                    </label>
+
+                    <label className="flex items-start gap-2.5 p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50/70 dark:bg-slate-800/40 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={mdIncludeFrontmatter}
+                        onChange={(e) => setMdIncludeFrontmatter(e.target.checked)}
+                        className="mt-0.5 rounded text-indigo-600 focus:ring-indigo-500"
+                      />
+                      <div>
+                        <span className="block text-xs font-bold text-slate-800 dark:text-slate-200">
+                          En-tête YAML (Frontmatter)
+                        </span>
+                        <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                          Ajoute les métadonnées (titre, fichier source, date) pour Obsidian, Notion ou Hugo.
+                        </span>
+                      </div>
+                    </label>
                   </div>
                 </div>
               )}
@@ -1185,14 +1391,45 @@ export const ToolWorkspace: React.FC = () => {
                     <span>{t('workspace_success_title')}</span>
                   </div>
 
-                  <p className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate mb-3">
+                  <p className="text-xs text-slate-600 dark:text-slate-300 font-medium truncate mb-2">
                     {resultFileName}
                   </p>
+
+                  {tool.id === 'compress-pdf' && resultMetadata && (
+                    <div className="mb-3 p-3 rounded-xl bg-white/90 dark:bg-slate-900/90 border border-emerald-300/80 dark:border-emerald-800/80 flex flex-wrap items-center justify-between gap-2 text-xs">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-slate-500 dark:text-slate-400">Original:</span>
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          {(resultMetadata.originalSize / (1024 * 1024) >= 0.1
+                            ? (resultMetadata.originalSize / (1024 * 1024)).toFixed(2) + ' MB'
+                            : (resultMetadata.originalSize / 1024).toFixed(0) + ' KB')}
+                        </span>
+                        <span className="text-slate-400">→</span>
+                        <span className="text-slate-500 dark:text-slate-400">Compressed:</span>
+                        <span className="font-bold text-emerald-600 dark:text-emerald-400">
+                          {(resultMetadata.newSize / (1024 * 1024) >= 0.1
+                            ? (resultMetadata.newSize / (1024 * 1024)).toFixed(2) + ' MB'
+                            : (resultMetadata.newSize / 1024).toFixed(0) + ' KB')}
+                        </span>
+                      </div>
+                      <span
+                        className={`px-2.5 py-0.5 rounded-full font-black text-[11px] ${
+                          resultMetadata.savedPercentage > 0
+                            ? 'bg-emerald-100 dark:bg-emerald-900/60 text-emerald-800 dark:text-emerald-300'
+                            : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300'
+                        }`}
+                      >
+                        {resultMetadata.savedPercentage > 0
+                          ? `-${resultMetadata.savedPercentage}% saved`
+                          : 'Maximally Optimized'}
+                      </span>
+                    </div>
+                  )}
 
                   <a
                     href={resultUrl}
                     download={resultFileName}
-                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition-all"
+                    className="w-full py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
                   >
                     <Download className="w-4 h-4" />
                     <span>{t('workspace_download_button')} ({(resultBlob?.size ? resultBlob.size / 1024 / 1024 : 0.5).toFixed(2)} MB)</span>
@@ -1201,24 +1438,59 @@ export const ToolWorkspace: React.FC = () => {
               )}
             </div>
 
-            {/* AI OCR Extracted Text Display */}
-            {aiExtractedText && (
+            {/* AI OCR & Markdown Extracted Text Display */}
+            {(aiExtractedText || markdownOutput) && (
               <div className="p-6 rounded-3xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-md text-left">
-                <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center justify-between gap-2 mb-3">
                   <span className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
-                    AI Extracted Document
+                    {markdownOutput ? (
+                      <>
+                        <FileCode className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>Aperçu Markdown (.md)</span>
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="w-3.5 h-3.5 text-indigo-500" />
+                        <span>AI Extracted Document</span>
+                      </>
+                    )}
                   </span>
-                  <button
-                    onClick={copyToClipboard}
-                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
-                  >
-                    {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span>{copiedText ? 'Copied' : 'Copy'}</span>
-                  </button>
+                  <div className="flex items-center gap-2">
+                    {markdownOutput && resultMetadata?.extractionMethod && (
+                      <span
+                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                          resultMetadata.extractionMethod === 'ai-ocr'
+                            ? 'bg-indigo-100 dark:bg-indigo-950/70 text-indigo-700 dark:text-indigo-300'
+                            : 'bg-emerald-100 dark:bg-emerald-950/70 text-emerald-700 dark:text-emerald-300'
+                        }`}
+                      >
+                        {resultMetadata.extractionMethod === 'ai-ocr' ? 'OCR IA' : 'Local'}
+                      </span>
+                    )}
+                    {markdownOutput && resultMetadata?.words && (
+                      <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                        {resultMetadata.words} mots • {resultMetadata.lines || markdownOutput.split('\n').length} lignes
+                      </span>
+                    )}
+                    <button
+                      onClick={() => {
+                        const textToCopy = markdownOutput || aiExtractedText;
+                        if (textToCopy) {
+                          navigator.clipboard.writeText(textToCopy);
+                          setCopiedText(true);
+                          setTimeout(() => setCopiedText(false), 2000);
+                          showToast('success', 'Copié dans le presse-papier');
+                        }
+                      }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-semibold text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                    >
+                      {copiedText ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                      <span>{copiedText ? 'Copié' : 'Copier'}</span>
+                    </button>
+                  </div>
                 </div>
-                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 font-mono text-xs text-slate-800 dark:text-slate-200 max-h-72 overflow-y-auto whitespace-pre-wrap leading-relaxed border border-slate-200/60 dark:border-slate-800/60">
-                  {aiExtractedText}
+                <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-950 font-mono text-xs text-slate-800 dark:text-slate-200 max-h-80 overflow-y-auto whitespace-pre-wrap leading-relaxed border border-slate-200/60 dark:border-slate-800/60">
+                  {markdownOutput || aiExtractedText}
                 </div>
               </div>
             )}

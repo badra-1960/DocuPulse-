@@ -18,24 +18,26 @@ import {
   Check,
   FileCheck,
   Zap,
+  FileCode,
 } from 'lucide-react';
 import {
   convertPdfToExcel,
   convertWordToPdf,
   convertPptToPdf,
   convertExcelToPdf,
+  convertDocumentToMarkdown,
   getExcelSheetNames,
   createZipArchive,
   FileConversionStatus,
 } from '../../services/conversionEngine';
 
 interface ConversionFeatureCard {
-  id: 'pdf-to-excel' | 'word-to-pdf' | 'ppt-to-pdf' | 'excel-to-pdf';
+  id: 'pdf-to-excel' | 'word-to-pdf' | 'ppt-to-pdf' | 'excel-to-pdf' | 'doc-to-markdown';
   title: string;
   shortName: string;
   description: string;
   sourceFormats: string;
-  targetFormat: 'xlsx' | 'pdf';
+  targetFormat: 'xlsx' | 'pdf' | 'md';
   targetFormatLabel: string;
   icon: React.ReactNode;
   accentBg: string;
@@ -46,6 +48,7 @@ interface ConversionFeatureCard {
 
 export const PdfConversionSection: React.FC = () => {
   const {
+    openTool,
     checkCanPerformOperation,
     recordOperation,
     showToast,
@@ -129,6 +132,25 @@ export const PdfConversionSection: React.FC = () => {
         t('conv_excel_to_pdf_h2'),
         t('conv_excel_to_pdf_h3'),
         t('conv_excel_to_pdf_h4'),
+      ],
+    },
+    {
+      id: 'doc-to-markdown',
+      title: t('conv_doc_to_md_title'),
+      shortName: t('conv_doc_to_md_short'),
+      description: t('conv_doc_to_md_desc'),
+      sourceFormats: '.pdf,.docx,.xlsx,.xls,.csv,.pptx,.html,.htm,.txt,.json,.md,.png,.jpg,.jpeg,.webp',
+      targetFormat: 'md',
+      targetFormatLabel: 'Markdown (.md)',
+      icon: <FileCode className="w-7 h-7 text-indigo-600 dark:text-indigo-400" />,
+      accentBg: 'from-indigo-500/10 via-slate-500/5 to-transparent border-indigo-200 dark:border-indigo-900/40 hover:border-indigo-500',
+      badgeColor: 'bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200 dark:border-indigo-800',
+      badgeText: t('conv_doc_to_md_badge'),
+      highlights: [
+        t('conv_doc_to_md_h1'),
+        t('conv_doc_to_md_h2'),
+        t('conv_doc_to_md_h3'),
+        t('conv_doc_to_md_h4'),
       ],
     },
   ];
@@ -274,24 +296,33 @@ export const PdfConversionSection: React.FC = () => {
         outputBlob = res.blob;
         outputFileName = res.fileName;
         pageOrCount = res.pageCount;
+      } else if (item.targetFormat === 'md' || activeFeature === 'doc-to-markdown') {
+        const res = await convertDocumentToMarkdown(
+          item.file,
+          { includeFrontmatter: false, includePageMarkers: true, allowAiOcrFallback: true },
+          onProgress
+        );
+        outputBlob = res.blob;
+        outputFileName = res.fileName;
+        pageOrCount = res.sectionCount;
       } else {
         throw new Error('Unknown conversion type.');
       }
 
       const outputUrl = URL.createObjectURL(outputBlob);
+      const resolvedToolId = item.targetFormat === 'md' ? 'doc-to-markdown' : activeFeature || 'pdf-to-excel';
 
       // Record successful operation
-      recordOperation({
-        toolId: activeFeature || 'pdf-to-excel',
-        toolName: CONVERSION_CARDS.find((c) => c.id === activeFeature)?.title || 'PDF Conversion',
-        fileName: item.file.name,
-        fileSize: item.file.size,
+      recordOperation(
+        resolvedToolId,
+        CONVERSION_CARDS.find((c) => c.id === resolvedToolId)?.title || 'PDF Conversion',
+        item.file.name,
+        item.file.size,
         outputFileName,
-        outputSize: outputBlob.size,
-        downloadUrl: outputUrl,
-        status: 'completed',
-        pagesOrCount: pageOrCount,
-      });
+        outputBlob.size,
+        outputUrl,
+        { pagesOrCount: pageOrCount }
+      );
 
       setQueue((prev) =>
         prev.map((q) =>
@@ -310,11 +341,11 @@ export const PdfConversionSection: React.FC = () => {
         )
       );
 
-      showToast({
-        type: 'success',
-        title: 'Conversion Complete',
-        message: `Successfully converted "${item.file.name}" to ${outputFileName}`,
-      });
+      showToast(
+        'success',
+        'Conversion Complete',
+        `Successfully converted "${item.file.name}" to ${outputFileName}`
+      );
     } catch (err: any) {
       console.error('Conversion failed for item:', item.file.name, err);
       setQueue((prev) =>
@@ -331,11 +362,11 @@ export const PdfConversionSection: React.FC = () => {
         )
       );
 
-      showToast({
-        type: 'error',
-        title: 'Conversion Failed',
-        message: `Could not convert "${item.file.name}". ${err.message || 'Please check file format.'}`,
-      });
+      showToast(
+        'error',
+        'Conversion Failed',
+        `Could not convert "${item.file.name}". ${err.message || 'Please check file format.'}`
+      );
     }
   };
 
@@ -367,11 +398,11 @@ export const PdfConversionSection: React.FC = () => {
   const handleDownloadAllZip = async () => {
     const completedItems = queue.filter((q) => q.status === 'completed' && q.outputBlob && q.outputFileName);
     if (completedItems.length === 0) {
-      showToast({
-        type: 'warning',
-        title: 'No Files to Package',
-        message: 'Please convert at least one file before downloading a ZIP archive.',
-      });
+      showToast(
+        'warning',
+        'No Files to Package',
+        'Please convert at least one file before downloading a ZIP archive.'
+      );
       return;
     }
 
@@ -392,18 +423,14 @@ export const PdfConversionSection: React.FC = () => {
       a.click();
       document.body.removeChild(a);
 
-      showToast({
-        type: 'success',
-        title: 'ZIP Archive Downloaded',
-        message: `Packaged ${completedItems.length} files into a single archive.`,
-      });
+      showToast(
+        'success',
+        'ZIP Archive Downloaded',
+        `Packaged ${completedItems.length} files into a single archive.`
+      );
     } catch (err: any) {
       console.error('ZIP generation error:', err);
-      showToast({
-        type: 'error',
-        title: 'ZIP Download Failed',
-        message: err.message || 'Could not package archive.',
-      });
+      showToast('error', 'ZIP Download Failed', err.message || 'Could not package archive.');
     } finally {
       setIsZipDownloading(false);
     }
@@ -477,9 +504,9 @@ export const PdfConversionSection: React.FC = () => {
           </p>
         </div>
 
-        {/* 4 Feature Cards Grid */}
+        {/* 4 Primary Feature Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {CONVERSION_CARDS.map((card) => {
+          {CONVERSION_CARDS.slice(0, 4).map((card) => {
             const isDragActive = dragOverCardId === card.id;
             return (
               <div
@@ -547,6 +574,74 @@ export const PdfConversionSection: React.FC = () => {
             );
           })}
         </div>
+
+        {/* Dedicated Horizontal Feature Card: Document to Markdown (.md) */}
+        {(() => {
+          const mdCard = CONVERSION_CARDS.find((c) => c.id === 'doc-to-markdown');
+          if (!mdCard) return null;
+          const isDragActive = dragOverCardId === mdCard.id;
+          return (
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOverCardId(mdCard.id);
+              }}
+              onDragLeave={() => setDragOverCardId(null)}
+              onDrop={(e) => handleCardDrop(e, mdCard.id)}
+              className={`mt-6 group relative p-6 sm:p-7 rounded-3xl bg-white dark:bg-slate-900/90 border transition-all duration-300 shadow-sm hover:shadow-xl ${
+                isDragActive
+                  ? 'border-indigo-500 ring-4 ring-indigo-500/20 scale-[1.01] bg-indigo-50/50 dark:bg-indigo-950/30'
+                  : mdCard.accentBg
+              }`}
+            >
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="flex items-start gap-4 max-w-2xl">
+                  <div className="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shadow-xs shrink-0 group-hover:scale-110 transition-transform">
+                    {mdCard.icon}
+                  </div>
+                  <div>
+                    <div className="flex flex-wrap items-center gap-2 mb-1">
+                      <h3 className="text-xl font-extrabold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400 transition-colors">
+                        {mdCard.title}
+                      </h3>
+                      <span className={`text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full border ${mdCard.badgeColor}`}>
+                        {mdCard.badgeText}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {mdCard.description}
+                    </p>
+                    <div className="mt-3 flex flex-wrap gap-x-5 gap-y-1.5">
+                      {mdCard.highlights.map((h, i) => (
+                        <div key={i} className="flex items-center gap-1.5 text-[11px] text-slate-600 dark:text-slate-300">
+                          <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                          <span>{h}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row lg:flex-col gap-2.5 shrink-0 lg:w-64">
+                  <button
+                    onClick={() => handleOpenFileDialog(mdCard.id)}
+                    className="flex items-center justify-center gap-2 py-3 px-4 rounded-2xl bg-slate-900 hover:bg-indigo-600 text-white dark:bg-slate-800 dark:hover:bg-indigo-600 text-xs font-bold shadow-md transition-all cursor-pointer"
+                  >
+                    <UploadCloud className="w-4 h-4" />
+                    <span>{t('conv_choose_drop')}</span>
+                  </button>
+                  <button
+                    onClick={() => openTool('doc-to-markdown')}
+                    className="flex items-center justify-center gap-1.5 py-2.5 px-4 rounded-2xl border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-slate-700 dark:text-slate-300 hover:text-indigo-600 dark:hover:text-indigo-400 text-xs font-bold transition-all cursor-pointer"
+                  >
+                    <span>{t('btn_launch_tool')}</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* Interactive Multi-File Conversion Queue & Progress Section */}
         {queue.length > 0 && (

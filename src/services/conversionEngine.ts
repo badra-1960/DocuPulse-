@@ -3,12 +3,22 @@ import mammoth from 'mammoth';
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
 import { PDFDocument } from 'pdf-lib';
-import { fileToArrayBuffer } from './pdfEngine';
+import * as pdfjsLib from 'pdfjs-dist';
+import { fileToArrayBuffer, normalizePdfError, safeLoadPdfDocument } from './pdfEngine';
+import { extractDocumentWithAi } from './aiService';
+
+// Configure PDF.js worker cleanly for Vite/ESM bundling
+if (typeof window !== 'undefined' && pdfjsLib.GlobalWorkerOptions) {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+    'pdfjs-dist/build/pdf.worker.min.mjs',
+    import.meta.url
+  ).href;
+}
 
 export interface FileConversionStatus {
   fileId: string;
   file: File;
-  targetFormat: 'xlsx' | 'pdf' | 'docx' | 'zip';
+  targetFormat: 'xlsx' | 'pdf' | 'docx' | 'md' | 'zip';
   status: 'pending' | 'processing' | 'completed' | 'failed';
   progress: number;
   statusMessage?: string;
@@ -39,9 +49,9 @@ export async function convertPdfToExcel(
   file: File,
   onProgress?: ConversionProgressCallback
 ): Promise<{ blob: Blob; fileName: string; sheetCount: number; rowCount: number }> {
-  onProgress?.(15, 'Reading PDF structure & objects...');
+  onProgress?.(15, 'Lecture et vérification de la structure du PDF...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
   const totalPages = pdfDoc.getPageCount();
 
   onProgress?.(35, `Analyzing ${totalPages} pages for tables, columns & financial data...`);
@@ -794,3 +804,709 @@ export async function createZipArchive(
   }
   return await zip.generateAsync({ type: 'blob' });
 }
+
+// =============================================================================
+// 5. DOCUMENT TO MARKDOWN (.md) CONVERSION ENGINE
+// Authentic client-side extraction for PDF, DOCX, XLSX/CSV, PPTX, HTML, JSON, TXT
+// =============================================================================
+
+export interface MarkdownConversionOptions {
+  includeFrontmatter?: boolean;
+  includePageMarkers?: boolean;
+  allowAiOcrFallback?: boolean;
+}
+
+export interface MarkdownConversionResult {
+  blob: Blob;
+  fileName: string;
+  markdown: string;
+  wordCount: number;
+  lineCount: number;
+  sectionCount: number;
+  extractionMethod: 'local-text' | 'ai-ocr';
+}
+
+/**
+ * Escapes Markdown table cell special characters
+ */
+function escapeMarkdownCell(val: unknown): string {
+  const str = val === null || val === undefined ? '' : String(val);
+  return str
+    .replace(/\|/g, '\\|')
+    .replace(/\r?\n/g, ' ')
+    .trim();
+}
+
+/**
+ * Converts a 2D array of rows into a GitHub-Flavored Markdown (GFM) table
+ */
+function rowsToMarkdownTable(rows: any[][]): string {
+  // Remove completely empty trailing rows
+  const nonEmptyRows = rows.filter(
+    (r) => Array.isArray(r) && r.some((cell) => String(cell ?? '').trim().length > 0)
+  );
+  if (nonEmptyRows.length === 0) return '';
+
+  const colCount = Math.max(1, ...nonEmptyRows.map((r) => r.length));
+  const normalizeRow = (r: any[]) =>
+    Array.from({ length: colCount }, (_, idx) => escapeMarkdownCell(r[idx]));
+
+  const headerCells = normalizeRow(nonEmptyRows[0]);
+  const separatorCells = Array.from({ length: colCount }, () => '---');
+  const bodyRows = nonEmptyRows.slice(1).map(normalizeRow);
+
+  const lines = [
+    `| ${headerCells.join(' | ')} |`,
+    `| ${separatorCells.join(' | ')} |`,
+    ...bodyRows.map((cells) => `| ${cells.join(' | ')} |`),
+  ];
+
+  return lines.join('\n');
+}
+
+/**
+ * Converts HTML DOM nodes cleanly into GitHub-Flavored Markdown
+ */
+function htmlToMarkdown(html: string): string {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(html, 'text/html');
+
+  // Strip non-content tags
+  doc.querySelectorAll('script, style, noscript, template').forEach((el) => el.remove());
+
+  const serializeInline = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      return (node.textContent || '').replace(/\s+/g, ' ');
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const el = node as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+    const inner = Array.from(el.childNodes).map(serializeInline).join('');
+
+    switch (tag) {
+      case 'br':
+        return '  \n';
+      case 'strong':
+      case 'b': {
+        const trimmed = inner.trim();
+        return trimmed ? `**${trimmed}**` : '';
+      }
+      case 'em':
+      case 'i': {
+        const trimmed = inner.trim();
+        return trimmed ? `*${trimmed}*` : '';
+      }
+      case 'del':
+      case 's':
+      case 'strike': {
+        const trimmed = inner.trim();
+        return trimmed ? `~~${trimmed}~~` : '';
+      }
+      case 'code': {
+        if (el.parentElement?.tagName.toLowerCase() === 'pre') {
+          return el.textContent || '';
+        }
+        const trimmed = (el.textContent || '').trim();
+        return trimmed ? `\`${trimmed.replace(/`/g, '\\`')}\`` : '';
+      }
+      case 'a': {
+        const href = el.getAttribute('href') || '';
+        const text = inner.trim() || href;
+        if (!href || href.startsWith('javascript:')) return text;
+        return `[${text}](${href})`;
+      }
+      case 'img': {
+        const alt = (el.getAttribute('alt') || 'image').trim();
+        const src = el.getAttribute('src') || '';
+        if (!src || src.startsWith('data:')) return alt ? `*[Image: ${alt}]*` : '';
+        return `![${alt}](${src})`;
+      }
+      default:
+        return inner;
+    }
+  };
+
+  const serializeList = (listEl: HTMLElement, ordered: boolean, depth: number): string => {
+    const indent = '  '.repeat(depth);
+    let itemIndex = 1;
+    const lines: string[] = [];
+
+    for (const child of Array.from(listEl.children)) {
+      if (child.tagName.toLowerCase() !== 'li') continue;
+      const prefix = ordered ? `${itemIndex++}. ` : '- ';
+      const inlineParts: string[] = [];
+      const nestedLists: string[] = [];
+
+      for (const liChild of Array.from(child.childNodes)) {
+        if (liChild.nodeType === Node.ELEMENT_NODE) {
+          const childTag = (liChild as HTMLElement).tagName.toLowerCase();
+          if (childTag === 'ul') {
+            nestedLists.push(serializeList(liChild as HTMLElement, false, depth + 1));
+            continue;
+          }
+          if (childTag === 'ol') {
+            nestedLists.push(serializeList(liChild as HTMLElement, true, depth + 1));
+            continue;
+          }
+        }
+        inlineParts.push(serializeInline(liChild));
+      }
+
+      const itemText = inlineParts.join('').replace(/\s+/g, ' ').trim();
+      if (itemText) {
+        lines.push(`${indent}${prefix}${itemText}`);
+      }
+      for (const nested of nestedLists) {
+        if (nested) lines.push(nested);
+      }
+    }
+
+    return lines.join('\n');
+  };
+
+  const serializeTable = (tableEl: HTMLElement): string => {
+    const rows: string[][] = [];
+    const trList = Array.from(tableEl.querySelectorAll('tr'));
+    for (const tr of trList) {
+      const cells = Array.from(tr.children)
+        .filter((c) => c.tagName.toLowerCase() === 'th' || c.tagName.toLowerCase() === 'td')
+        .map((cell) =>
+          Array.from(cell.childNodes)
+            .map(serializeInline)
+            .join('')
+            .replace(/\s+/g, ' ')
+            .trim()
+        );
+      if (cells.length > 0) {
+        rows.push(cells);
+      }
+    }
+    return rowsToMarkdownTable(rows);
+  };
+
+  const serializeBlock = (node: Node): string => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const txt = (node.textContent || '').replace(/\s+/g, ' ').trim();
+      return txt;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return '';
+
+    const el = node as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+
+    if (/^h[1-6]$/.test(tag)) {
+      const level = Number(tag[1]);
+      const headingText = Array.from(el.childNodes).map(serializeInline).join('').replace(/\s+/g, ' ').trim();
+      return headingText ? `${'#'.repeat(level)} ${headingText}` : '';
+    }
+
+    switch (tag) {
+      case 'p': {
+        const text = Array.from(el.childNodes).map(serializeInline).join('').trim();
+        return text;
+      }
+      case 'hr':
+        return '---';
+      case 'pre': {
+        const codeText = (el.textContent || '').replace(/\n+$/, '');
+        return codeText ? `\`\`\`\n${codeText}\n\`\`\`` : '';
+      }
+      case 'blockquote': {
+        const inner = Array.from(el.childNodes).map(serializeBlock).filter(Boolean).join('\n\n');
+        if (!inner) return '';
+        return inner
+          .split('\n')
+          .map((l) => `> ${l}`)
+          .join('\n');
+      }
+      case 'ul':
+        return serializeList(el, false, 0);
+      case 'ol':
+        return serializeList(el, true, 0);
+      case 'table':
+        return serializeTable(el);
+      case 'div':
+      case 'section':
+      case 'article':
+      case 'main':
+      case 'header':
+      case 'footer':
+      case 'body': {
+        const blockTags = new Set([
+          'p', 'div', 'section', 'article', 'main', 'header', 'footer',
+          'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'ul', 'ol', 'table', 'pre', 'blockquote', 'hr',
+        ]);
+        const resultBlocks: string[] = [];
+        let inlineBuffer: string[] = [];
+
+        const flushInline = () => {
+          const joined = inlineBuffer.join('').replace(/\s+/g, ' ').trim();
+          if (joined) resultBlocks.push(joined);
+          inlineBuffer = [];
+        };
+
+        for (const child of Array.from(el.childNodes)) {
+          if (
+            child.nodeType === Node.ELEMENT_NODE &&
+            blockTags.has((child as HTMLElement).tagName.toLowerCase())
+          ) {
+            flushInline();
+            const blockMd = serializeBlock(child);
+            if (blockMd.trim()) resultBlocks.push(blockMd.trim());
+          } else {
+            inlineBuffer.push(serializeInline(child));
+          }
+        }
+        flushInline();
+
+        return resultBlocks.join('\n\n');
+      }
+      default: {
+        const text = Array.from(el.childNodes).map(serializeInline).join('').trim();
+        return text;
+      }
+    }
+  };
+
+  const blocks = Array.from(doc.body.childNodes)
+    .map(serializeBlock)
+    .filter((b) => b.trim().length > 0);
+
+  return blocks.join('\n\n').replace(/\n{3,}/g, '\n\n').trim();
+}
+
+interface PdfLine {
+  y: number;
+  text: string;
+  fontSize: number;
+}
+
+/**
+ * Extracts structured Markdown from an authentic text-based PDF using PDF.js
+ */
+async function extractPdfToMarkdown(
+  file: File,
+  arrayBuffer: ArrayBuffer,
+  includePageMarkers: boolean,
+  allowAiOcrFallback: boolean,
+  onProgress?: ConversionProgressCallback
+): Promise<{ markdown: string; pageCount: number; extractionMethod: 'local-text' | 'ai-ocr' }> {
+  // Pre-validate magic bytes & encryption/corruption using safeLoadPdfDocument
+  await safeLoadPdfDocument(arrayBuffer, file.name);
+
+  onProgress?.(25, 'Extraction des flux texte PDF via PDF.js...');
+  let pdfDoc: pdfjsLib.PDFDocumentProxy;
+  try {
+    const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer.slice(0)) });
+    pdfDoc = await loadingTask.promise;
+  } catch (err: any) {
+    throw normalizePdfError(err, file.name);
+  }
+
+  const numPages = pdfDoc.numPages;
+  const pageLinesList: PdfLine[][] = [];
+  const allFontSizes: number[] = [];
+
+  try {
+    for (let p = 1; p <= numPages; p++) {
+      const pct = Math.round(25 + (p / numPages) * 50);
+      onProgress?.(pct, `Analyse structurée de la page ${p} sur ${numPages}...`);
+
+      const page = await pdfDoc.getPage(p);
+      const textContent = await page.getTextContent();
+
+      interface PositionedItem {
+        str: string;
+        x: number;
+        y: number;
+        width: number;
+        fontSize: number;
+      }
+
+      const items: PositionedItem[] = [];
+      for (const rawItem of textContent?.items || []) {
+        if (!('str' in rawItem) || !rawItem.str || rawItem.str.trim().length === 0) continue;
+        const t = Array.isArray(rawItem.transform) ? rawItem.transform : [12, 0, 0, 12, 0, 0];
+        const fontSize = Math.hypot(t[0], t[1]) || Math.hypot(t[2], t[3]) || rawItem.height || 12;
+        items.push({
+          str: rawItem.str,
+          x: t[4] ?? 0,
+          y: t[5] ?? 0,
+          width: typeof rawItem.width === 'number' ? rawItem.width : 0,
+          fontSize,
+        });
+        allFontSizes.push(fontSize);
+      }
+
+      // Group items into horizontal lines by Y coordinate (within ~3.5pt tolerance)
+      items.sort((a, b) => b.y - a.y || a.x - b.x);
+      const lines: PdfLine[] = [];
+      let currentLineItems: PositionedItem[] = [];
+      let currentY: number | null = null;
+
+      const flushLine = () => {
+        if (currentLineItems.length === 0) return;
+        currentLineItems.sort((a, b) => a.x - b.x);
+        let lineStr = '';
+        for (let idx = 0; idx < currentLineItems.length; idx++) {
+          const cur = currentLineItems[idx];
+          if (idx > 0) {
+            const prev = currentLineItems[idx - 1];
+            const prevEnd = prev.x + prev.width;
+            const gap = cur.x - prevEnd;
+            if (!lineStr.endsWith(' ') && !cur.str.startsWith(' ') && gap > Math.max(1.5, cur.fontSize * 0.16)) {
+              lineStr += ' ';
+            }
+          }
+          lineStr += cur.str;
+        }
+        const avgFont =
+          currentLineItems.reduce((sum, it) => sum + it.fontSize, 0) / currentLineItems.length;
+        const trimmed = lineStr.replace(/\s+/g, ' ').trim();
+        if (trimmed.length > 0) {
+          lines.push({
+            y: currentY ?? 0,
+            text: trimmed,
+            fontSize: avgFont,
+          });
+        }
+        currentLineItems = [];
+      };
+
+      for (const item of items) {
+        if (currentY === null || Math.abs(item.y - currentY) <= 3.5) {
+          if (currentY === null) currentY = item.y;
+          currentLineItems.push(item);
+        } else {
+          flushLine();
+          currentY = item.y;
+          currentLineItems.push(item);
+        }
+      }
+      flushLine();
+
+      pageLinesList.push(lines);
+    }
+  } finally {
+    await pdfDoc.cleanup?.();
+  }
+
+  const totalLines = pageLinesList.reduce((sum, ls) => sum + ls.length, 0);
+  if (totalLines === 0) {
+    if (!allowAiOcrFallback) {
+      throw new Error(
+        'Ce PDF ne contient aucun texte extractible (document numérisé ou composé uniquement d\'images). Activez le fallback OCR IA ou utilisez l\'outil « AI OCR & Intelligence ».'
+      );
+    }
+
+    onProgress?.(55, 'PDF numérisé détecté — préparation OCR IA en Markdown...');
+    const aiRes = await extractDocumentWithAi(file, 'ocr', 'auto', (pct, msg) => {
+      onProgress?.(Math.min(95, Math.round(55 + pct * 0.4)), msg);
+    });
+    if (!aiRes.success || !aiRes.text || aiRes.text.trim().length === 0) {
+      throw new Error(
+        aiRes.error ||
+          'Ce PDF est numérisé (sans couche texte) et l’extraction OCR IA n’a pas pu aboutir. Veuillez vérifier votre quota ou réessayer.'
+      );
+    }
+
+    return {
+      markdown: aiRes.text.trim(),
+      pageCount: numPages,
+      extractionMethod: 'ai-ocr',
+    };
+  }
+
+  // Compute median body font size for heading detection
+  const sortedSizes = [...allFontSizes].sort((a, b) => a - b);
+  const medianFontSize = sortedSizes[Math.floor(sortedSizes.length / 2)] || 12;
+
+  const pageSections: string[] = [];
+  for (let i = 0; i < pageLinesList.length; i++) {
+    const lines = pageLinesList[i];
+    if (lines.length === 0) continue;
+
+    const mdBlocks: string[] = [];
+    let paragraphBuffer: string[] = [];
+    let prevY: number | null = null;
+
+    const flushParagraph = () => {
+      if (paragraphBuffer.length > 0) {
+        let joined = '';
+        for (const seg of paragraphBuffer) {
+          if (!joined) {
+            joined = seg;
+          } else if (joined.endsWith('-') && /^[a-zà-öø-ÿ]/.test(seg)) {
+            joined = joined.slice(0, -1) + seg;
+          } else {
+            joined += ' ' + seg;
+          }
+        }
+        mdBlocks.push(joined);
+        paragraphBuffer = [];
+      }
+    };
+
+    for (const line of lines) {
+      const yGap = prevY !== null ? Math.abs(prevY - line.y) : 0;
+      prevY = line.y;
+
+      const isLargeHeading = line.fontSize >= medianFontSize * 1.45 && line.text.length <= 120;
+      const isSubHeading =
+        !isLargeHeading && line.fontSize >= medianFontSize * 1.22 && line.text.length <= 120;
+      const bulletMatch = line.text.match(/^[•●▪◦‣–—]\s*(.+)$/);
+
+      if (isLargeHeading) {
+        flushParagraph();
+        mdBlocks.push(`# ${line.text}`);
+      } else if (isSubHeading) {
+        flushParagraph();
+        mdBlocks.push(`## ${line.text}`);
+      } else if (bulletMatch) {
+        flushParagraph();
+        mdBlocks.push(`- ${bulletMatch[1].trim()}`);
+      } else if (/^[-*]\s+/.test(line.text) || /^\d+[.)]\s+/.test(line.text)) {
+        flushParagraph();
+        mdBlocks.push(line.text);
+      } else {
+        if (yGap > medianFontSize * 1.8 && paragraphBuffer.length > 0) {
+          flushParagraph();
+        }
+        paragraphBuffer.push(line.text);
+      }
+    }
+    flushParagraph();
+
+    const pageMd = mdBlocks.join('\n\n');
+    if (includePageMarkers && numPages > 1) {
+      pageSections.push(`## Page ${i + 1}\n\n${pageMd}`);
+    } else {
+      pageSections.push(pageMd);
+    }
+  }
+
+  const finalMarkdown = pageSections.join(includePageMarkers && numPages > 1 ? '\n\n---\n\n' : '\n\n');
+  return { markdown: finalMarkdown, pageCount: numPages, extractionMethod: 'local-text' };
+}
+
+/**
+ * 5. Document to Markdown (.md)
+ * Converts PDF, Word (.docx), Excel (.xlsx/.xls/.csv), PowerPoint (.pptx), HTML, JSON, or TXT to clean Markdown (.md)
+ */
+export async function convertDocumentToMarkdown(
+  file: File,
+  options: MarkdownConversionOptions = {},
+  onProgress?: ConversionProgressCallback
+): Promise<MarkdownConversionResult> {
+  const includeFrontmatter = options.includeFrontmatter ?? false;
+  const includePageMarkers = options.includePageMarkers ?? true;
+  const allowAiOcrFallback = options.allowAiOcrFallback ?? true;
+
+  const lowerName = file.name.toLowerCase();
+  const ext = lowerName.split('.').pop() || '';
+  const baseName = file.name.replace(/\.[^/.]+$/, '');
+
+  onProgress?.(10, `Lecture du fichier "${file.name}"...`);
+
+  let markdownBody = '';
+  let sectionCount = 1;
+  let extractionMethod: 'local-text' | 'ai-ocr' = 'local-text';
+
+  if (ext === 'pdf') {
+    const arrayBuffer = await fileToArrayBuffer(file);
+    const pdfRes = await extractPdfToMarkdown(
+      file,
+      arrayBuffer,
+      includePageMarkers,
+      allowAiOcrFallback,
+      onProgress
+    );
+    markdownBody = pdfRes.markdown;
+    sectionCount = pdfRes.pageCount;
+    extractionMethod = pdfRes.extractionMethod;
+  } else if (ext === 'png' || ext === 'jpg' || ext === 'jpeg' || ext === 'webp') {
+    if (!allowAiOcrFallback) {
+      throw new Error(
+        `La conversion d'images (.${ext}) en Markdown nécessite l'OCR IA. Veuillez activer l'option OCR IA automatique.`
+      );
+    }
+    onProgress?.(40, `Extraction OCR intelligente de l'image "${file.name}" en Markdown...`);
+    const aiRes = await extractDocumentWithAi(file, 'ocr', 'auto');
+    if (!aiRes.success || !aiRes.text || aiRes.text.trim().length === 0) {
+      throw new Error(aiRes.error || `Impossible d'extraire du texte depuis l'image "${file.name}".`);
+    }
+    markdownBody = aiRes.text.trim();
+    extractionMethod = 'ai-ocr';
+  } else if (ext === 'docx') {
+    onProgress?.(30, 'Extraction sémantique du document Word (.docx)...');
+    const arrayBuffer = await fileToArrayBuffer(file);
+    const result = await mammoth.convertToHtml({ arrayBuffer });
+    if (!result.value || result.value.trim().length === 0) {
+      throw new Error(`Aucun texte exploitable n'a pu être extrait de "${file.name}".`);
+    }
+    onProgress?.(65, 'Conversion de la structure HTML vers Markdown GFM...');
+    markdownBody = htmlToMarkdown(result.value);
+  } else if (ext === 'doc') {
+    const arrayBuffer = await fileToArrayBuffer(file);
+    const header = new Uint8Array(arrayBuffer.slice(0, 4));
+    const isOle = header[0] === 0xd0 && header[1] === 0xcf && header[2] === 0x11 && header[3] === 0xe0;
+    if (isOle) {
+      throw new Error(
+        `Le format binaire ancien (.doc) de "${file.name}" ne peut pas être lu fidèlement dans le navigateur. Veuillez l'enregistrer au format .docx puis réessayer.`
+      );
+    }
+    const rawText = await file.text();
+    markdownBody = /<html|<body|<p/i.test(rawText) ? htmlToMarkdown(rawText) : rawText.trim();
+  } else if (ext === 'xlsx' || ext === 'xls' || ext === 'csv') {
+    onProgress?.(35, 'Lecture des feuilles de calcul et tableaux...');
+    let workbook: XLSX.WorkBook;
+    if (ext === 'csv') {
+      const csvText = await file.text();
+      workbook = XLSX.read(csvText, { type: 'string' });
+    } else {
+      const arrayBuffer = await fileToArrayBuffer(file);
+      workbook = XLSX.read(arrayBuffer, { type: 'array' });
+    }
+
+    const sheetNames = workbook.SheetNames || [];
+    if (sheetNames.length === 0) {
+      throw new Error(`Le classeur "${file.name}" ne contient aucune feuille exploitable.`);
+    }
+
+    sectionCount = sheetNames.length;
+    const sheetBlocks: string[] = [];
+    for (let i = 0; i < sheetNames.length; i++) {
+      const sheetName = sheetNames[i];
+      const ws = workbook.Sheets[sheetName];
+      if (!ws) continue;
+      const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      const tableMd = rowsToMarkdownTable(rawRows);
+      if (tableMd) {
+        sheetBlocks.push(sheetNames.length > 1 ? `## ${sheetName}\n\n${tableMd}` : `# ${baseName}\n\n${tableMd}`);
+      }
+    }
+
+    if (sheetBlocks.length === 0) {
+      throw new Error(`Aucune donnée tabulaire n'a été détectée dans "${file.name}".`);
+    }
+    markdownBody = sheetBlocks.join('\n\n---\n\n');
+  } else if (ext === 'pptx') {
+    onProgress?.(35, 'Extraction des diapositives PowerPoint (.pptx)...');
+    const arrayBuffer = await fileToArrayBuffer(file);
+    const zip = await JSZip.loadAsync(arrayBuffer);
+    const slidePaths = Object.keys(zip.files)
+      .filter((k) => /^ppt\/slides\/slide\d+\.xml$/i.test(k))
+      .sort((a, b) => {
+        const numA = parseInt(a.replace(/\D/g, ''), 10) || 0;
+        const numB = parseInt(b.replace(/\D/g, ''), 10) || 0;
+        return numA - numB;
+      });
+
+    if (slidePaths.length === 0) {
+      throw new Error(`Aucune diapositive exploitable trouvée dans "${file.name}".`);
+    }
+
+    sectionCount = slidePaths.length;
+    const parser = new DOMParser();
+    const slideBlocks: string[] = [];
+
+    for (let i = 0; i < slidePaths.length; i++) {
+      const xmlStr = await zip.files[slidePaths[i]].async('text');
+      const xmlDoc = parser.parseFromString(xmlStr, 'application/xml');
+      const pNodes = Array.from(xmlDoc.getElementsByTagName('a:p'));
+
+      const paragraphs: string[] = [];
+      for (const pNode of pNodes) {
+        const tNodes = Array.from(pNode.getElementsByTagName('a:t'));
+        const lineText = tNodes
+          .map((t) => t.textContent || '')
+          .join('')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (lineText.length > 0) {
+          paragraphs.push(lineText);
+        }
+      }
+
+      if (paragraphs.length > 0) {
+        const title = paragraphs[0];
+        const body = paragraphs.slice(1).map((p) => `- ${p}`).join('\n');
+        const header = includePageMarkers ? `## Slide ${i + 1} : ${title}` : `## ${title}`;
+        slideBlocks.push(body ? `${header}\n\n${body}` : header);
+      }
+    }
+
+    if (slideBlocks.length === 0) {
+      throw new Error(`Aucun texte extractible trouvé dans les diapositives de "${file.name}".`);
+    }
+    markdownBody = slideBlocks.join(includePageMarkers ? '\n\n---\n\n' : '\n\n');
+  } else if (ext === 'ppt') {
+    throw new Error(
+      `Le format binaire ancien (.ppt) n'est pas pris en charge. Veuillez convertir "${file.name}" en .pptx avant l'export Markdown.`
+    );
+  } else if (ext === 'html' || ext === 'htm') {
+    onProgress?.(40, 'Conversion du document HTML vers Markdown...');
+    const html = await file.text();
+    markdownBody = htmlToMarkdown(html);
+  } else if (ext === 'json') {
+    onProgress?.(40, 'Formatage JSON vers bloc Markdown...');
+    const raw = await file.text();
+    let formatted = raw.trim();
+    try {
+      formatted = JSON.stringify(JSON.parse(raw), null, 2);
+    } catch {
+      // Keep raw text if invalid JSON
+    }
+    markdownBody = `# ${baseName}\n\n\`\`\`json\n${formatted}\n\`\`\``;
+  } else if (ext === 'txt' || ext === 'md' || ext === 'markdown' || ext === 'log') {
+    onProgress?.(40, 'Normalisation du texte brut en Markdown...');
+    const raw = await file.text();
+    markdownBody = raw.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+  } else {
+    throw new Error(
+      `Format ".${ext}" non pris en charge pour la conversion Markdown. Formats acceptés : PDF, DOCX, XLSX, XLS, CSV, PPTX, HTML, JSON, TXT, PNG, JPG, WebP.`
+    );
+  }
+
+  if (!markdownBody || markdownBody.trim().length === 0) {
+    throw new Error(`Le document "${file.name}" ne contient aucun texte exploitable à convertir en Markdown.`);
+  }
+
+  onProgress?.(85, 'Finalisation du fichier Markdown (.md)...');
+
+  let finalMarkdown = markdownBody.trim();
+  if (includeFrontmatter) {
+    const safeTitle = baseName.replace(/"/g, '\\"');
+    const frontmatter = [
+      '---',
+      `title: "${safeTitle}"`,
+      `source_file: "${file.name.replace(/"/g, '\\"')}"`,
+      `source_format: "${ext.toUpperCase()}"`,
+      `extraction_method: "${extractionMethod}"`,
+      `converted_at: "${new Date().toISOString()}"`,
+      '---',
+      '',
+    ].join('\n');
+    finalMarkdown = `${frontmatter}\n${finalMarkdown}`;
+  }
+
+  finalMarkdown += '\n';
+
+  const blob = new Blob([finalMarkdown], { type: 'text/markdown;charset=utf-8' });
+  const words = finalMarkdown.trim().split(/\s+/).filter(Boolean).length;
+  const lines = finalMarkdown.split('\n').length;
+
+  onProgress?.(100, 'Conversion en Markdown terminée !');
+
+  return {
+    blob,
+    fileName: `${baseName}.md`,
+    markdown: finalMarkdown,
+    wordCount: words,
+    lineCount: lines,
+    sectionCount,
+    extractionMethod,
+  };
+}
+

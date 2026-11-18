@@ -13,6 +13,7 @@ export type ToolId =
   | 'pdf-to-image'
   | 'image-to-pdf'
   | 'pdf-to-word'
+  | 'doc-to-markdown'
   | 'image-converter'
   | 'ai-ocr'
   | 'watermark-pdf'
@@ -52,6 +53,8 @@ export interface UserProfile {
   apiKey?: string;
   organization?: string;
   subscriptionEndDate?: string;
+  inGracePeriod?: boolean;
+  gracePeriodRemainingHours?: number;
 }
 
 export type User = UserProfile;

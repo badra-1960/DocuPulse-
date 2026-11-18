@@ -20,6 +20,7 @@ import {
   Zap,
   FileSpreadsheet,
   Presentation,
+  FileCode,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -37,6 +38,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   RotateCw: <RotateCw className="w-6 h-6 text-orange-500" />,
   FileSpreadsheet: <FileSpreadsheet className="w-6 h-6 text-emerald-600" />,
   Presentation: <Presentation className="w-6 h-6 text-orange-500" />,
+  FileCode: <FileCode className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />,
 };
 
 export const ToolGrid: React.FC = () => {

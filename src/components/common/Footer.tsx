@@ -1,7 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
 import { TOOLS_LIST } from '../../data/toolsData';
-import { LanguageSelector } from './LanguageSelector';
 import {
   Zap,
   ShieldCheck,
@@ -167,14 +166,26 @@ export const Footer: React.FC = () => {
                 </button>
               </li>
               <li>
-                <span className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer">
+                <button
+                  onClick={() => {
+                    setCurrentView('legal');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer text-left"
+                >
                   {t('footer_privacy_policy')}
-                </span>
+                </button>
               </li>
               <li>
-                <span className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors cursor-pointer">
+                <button
+                  onClick={() => {
+                    setCurrentView('legal');
+                    window.scrollTo({ top: 0, behavior: 'smooth' });
+                  }}
+                  className="text-slate-500 hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors cursor-pointer text-left"
+                >
                   {t('footer_terms_service')}
-                </span>
+                </button>
               </li>
             </ul>
           </div>
@@ -183,11 +194,8 @@ export const Footer: React.FC = () => {
         {/* Bottom bar */}
         <div className="mt-12 pt-6 border-t border-slate-200 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 gap-4">
           <p>© 2026 DocuPulse SaaS Platform. {t('footer_rights_reserved')}</p>
-          <div className="flex items-center gap-4">
-            <LanguageSelector variant="segmented" />
-            <div className="flex items-center gap-1">
-              <span>{t('footer_tagline')}</span>
-            </div>
+          <div className="flex items-center gap-1">
+            <span>{t('footer_tagline')}</span>
           </div>
         </div>
       </div>

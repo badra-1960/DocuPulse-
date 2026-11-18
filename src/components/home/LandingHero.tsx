@@ -12,6 +12,7 @@ import {
   Minimize2,
   CheckCircle,
   Lock,
+  FileCode,
 } from 'lucide-react';
 
 export const LandingHero: React.FC = () => {
@@ -50,6 +51,8 @@ export const LandingHero: React.FC = () => {
       openTool('ppt-to-pdf');
     } else if (name.endsWith('.docx') || name.endsWith('.doc')) {
       openTool('word-to-pdf');
+    } else if (name.endsWith('.html') || name.endsWith('.htm') || name.endsWith('.txt') || name.endsWith('.json')) {
+      openTool('doc-to-markdown');
     } else if (type.startsWith('image/')) {
       openTool('image-to-pdf');
     } else if (name.endsWith('.pdf') || type === 'application/pdf') {
@@ -160,6 +163,7 @@ export const LandingHero: React.FC = () => {
           {[
             { id: 'pdf-to-excel', label: 'PDF to Excel', icon: <FileText className="w-3.5 h-3.5 text-emerald-500" /> },
             { id: 'word-to-pdf', label: 'Word to PDF', icon: <FileText className="w-3.5 h-3.5 text-blue-500" /> },
+            { id: 'doc-to-markdown', label: 'Doc to Markdown', icon: <FileCode className="w-3.5 h-3.5 text-indigo-500" /> },
             { id: 'merge-pdf', label: 'Merge PDF', icon: <Layers className="w-3.5 h-3.5 text-rose-500" /> },
             { id: 'compress-pdf', label: 'Compress PDF', icon: <Minimize2 className="w-3.5 h-3.5 text-emerald-500" /> },
             { id: 'image-to-pdf', label: 'Image to PDF', icon: <FileImage className="w-3.5 h-3.5 text-violet-500" /> },

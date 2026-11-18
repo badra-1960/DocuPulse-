@@ -1,6 +1,16 @@
-import { PDFDocument, rgb, degrees, StandardFonts } from 'pdf-lib';
+import {
+  PDFDocument,
+  rgb,
+  degrees,
+  StandardFonts,
+  PDFName,
+  PDFNumber,
+  PDFRawStream,
+  decodePDFRawStream,
+} from 'pdf-lib';
 import jsPDF from 'jspdf';
 import JSZip from 'jszip';
+import mammoth from 'mammoth';
 
 export interface ProcessProgressCallback {
   (percentage: number, statusText: string): void;
@@ -11,7 +21,7 @@ export async function fileToArrayBuffer(file: File): Promise<ArrayBuffer> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as ArrayBuffer);
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error(`Impossible de lire le fichier "${file.name}". Vérifiez qu'il n'est pas verrouillé.`));
     reader.readAsArrayBuffer(file);
   });
 }
@@ -21,9 +31,98 @@ export async function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
+    reader.onerror = () => reject(new Error(`Erreur lors de la lecture des données de "${file.name}".`));
     reader.readAsDataURL(file);
   });
+}
+
+/**
+ * Traduit et normalise les erreurs PDF techniques en messages clairs et bienveillants en français
+ */
+export function normalizePdfError(error: any, fileName?: string): Error {
+  const name = fileName ? ` ("${fileName}")` : '';
+  const rawMsg = (error?.message || String(error || '')).toLowerCase();
+
+  // 1. Détection des documents chiffrés / protégés par mot de passe
+  if (
+    rawMsg.includes('encrypted') ||
+    rawMsg.includes('password') ||
+    rawMsg.includes('decrypt') ||
+    rawMsg.includes('security handler') ||
+    rawMsg.includes('protégé')
+  ) {
+    return new Error('Ce document est protégé par un mot de passe. Veuillez le déverrouiller avant traitement.');
+  }
+
+  // 2. Détection des documents corrompus ou incomplets
+  if (
+    rawMsg.includes('corrupt') ||
+    rawMsg.includes('invalid pdf') ||
+    rawMsg.includes('failed to parse') ||
+    rawMsg.includes('stream end') ||
+    rawMsg.includes('unexpected end') ||
+    rawMsg.includes('bad xref') ||
+    rawMsg.includes('trailer not found') ||
+    rawMsg.includes('signature %pdf- introuvable') ||
+    rawMsg.includes('signature pdf manquante')
+  ) {
+    return new Error(
+      `Ce document${name} est corrompu ou incomplet. Assurez-vous que le fichier n'est pas endommagé et que le téléchargement est terminé.`
+    );
+  }
+
+  if (rawMsg.includes('no pages') || rawMsg.includes('empty')) {
+    return new Error(`Le document${name} ne contient aucune page exploitable.`);
+  }
+
+  if (rawMsg.includes('out of memory') || rawMsg.includes('allocation size overflow')) {
+    return new Error(
+      `Mémoire insuffisante pour traiter ce document${name}. Le fichier est trop volumineux pour votre navigateur actuel.`
+    );
+  }
+
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+/**
+ * Charge un document PDF de manière sécurisée avec pré-validation de l'en-tête %PDF- et capture des erreurs
+ */
+export async function safeLoadPdfDocument(
+  arrayBuffer: ArrayBuffer,
+  fileName?: string,
+  options?: { updateMetadata?: boolean }
+): Promise<PDFDocument> {
+  // 1. Pré-validation de la signature binaire magique %PDF-
+  if (arrayBuffer.byteLength < 5) {
+    throw new Error('Ce document est corrompu ou incomplet (signature PDF manquante).');
+  }
+
+  const headerBytes = new Uint8Array(arrayBuffer.slice(0, 1024));
+  const headerStr = String.fromCharCode(...Array.from(headerBytes));
+  if (!headerStr.includes('%PDF-')) {
+    throw new Error(
+      'Ce document est corrompu ou invalide (signature %PDF- introuvable).'
+    );
+  }
+
+  // 2. Chargement sécurisé avec détection stricte sans ignoreEncryption
+  try {
+    return await PDFDocument.load(arrayBuffer, {
+      ignoreEncryption: false, // Strict: intercepter immédiatement l'erreur de chiffrement
+      updateMetadata: options?.updateMetadata ?? false,
+    });
+  } catch (err: any) {
+    const errMsg = (err?.message || '').toLowerCase();
+    if (
+      errMsg.includes('encrypted') ||
+      errMsg.includes('password') ||
+      errMsg.includes('decrypt') ||
+      errMsg.includes('security handler')
+    ) {
+      throw new Error('Ce document est protégé par un mot de passe. Veuillez le déverrouiller avant traitement.');
+    }
+    throw normalizePdfError(err, fileName);
+  }
 }
 
 /**
@@ -47,7 +146,7 @@ export async function mergePdfs(
     onProgress?.(progressPercent, `Merging "${file.name}" (${i + 1}/${files.length})...`);
 
     const arrayBuffer = await fileToArrayBuffer(file);
-    const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+    const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
     const copiedPages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
 
     copiedPages.forEach((page) => {
@@ -75,11 +174,11 @@ export async function splitPdf(
 ): Promise<{ blob: Blob; fileName: string; isZip: boolean; extractedPages: number }> {
   onProgress?.(15, 'Reading PDF structure...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const srcPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const srcPdf = await safeLoadPdfDocument(arrayBuffer, file.name);
   const totalPages = srcPdf.getPageCount();
 
   if (totalPages === 0) {
-    throw new Error('The PDF document contains no pages.');
+    throw new Error('Le document PDF ne contient aucune page.');
   }
 
   if (mode === 'all') {
@@ -157,53 +256,316 @@ export async function splitPdf(
 }
 
 /**
- * Compress PDF with stream optimization and structure cleanup
+ * Helper to decode an image Blob into an HTMLImageElement in the browser
+ */
+function decodeImageElementFromBlob(blob: Blob): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = (err) => {
+      URL.revokeObjectURL(url);
+      reject(err);
+    };
+    img.src = url;
+  });
+}
+
+/**
+ * Recompresses an embedded raster image stream in-place inside the PDF
+ */
+async function recompressRasterImage(
+  stream: PDFRawStream,
+  filter: string,
+  width: number,
+  height: number,
+  colorSpace: string,
+  maxDimension: number,
+  quality: number
+): Promise<boolean> {
+  try {
+    if (!stream.contents || stream.contents.length < 4096) {
+      // Skip tiny icons/logos under 4KB to preserve pixel perfection and avoid size inflation
+      return false;
+    }
+
+    // 1. DCTDecode (Standard JPEG embedded image)
+    if (filter.includes('DCTDecode') || (stream.contents[0] === 0xff && stream.contents[1] === 0xd8)) {
+      const blob = new Blob([stream.contents], { type: 'image/jpeg' });
+      const img = await decodeImageElementFromBlob(blob);
+      const origW = img.naturalWidth || img.width || width;
+      const origH = img.naturalHeight || img.height || height;
+
+      if (origW <= 0 || origH <= 0) return false;
+
+      const scale = Math.min(1, maxDimension / Math.max(origW, origH));
+      const targetW = Math.max(1, Math.round(origW * scale));
+      const targetH = Math.max(1, Math.round(origH * scale));
+
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return false;
+
+      // Fill white background in case of JPEG conversion
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, targetW, targetH);
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      const compressedBlob = await new Promise<Blob | null>((resolve) =>
+        canvas.toBlob(resolve, 'image/jpeg', quality)
+      );
+      if (!compressedBlob) return false;
+
+      const newBuffer = await compressedBlob.arrayBuffer();
+      const newBytes = new Uint8Array(newBuffer);
+
+      // Only substitute if we achieved true size reduction
+      if (newBytes.length < stream.contents.length) {
+        (stream as any).contents = newBytes;
+        stream.dict.set(PDFName.of('Length'), PDFNumber.of(newBytes.length));
+        stream.dict.set(PDFName.of('Width'), PDFNumber.of(targetW));
+        stream.dict.set(PDFName.of('Height'), PDFNumber.of(targetH));
+        stream.dict.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
+        stream.dict.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB'));
+        stream.dict.set(PDFName.of('BitsPerComponent'), PDFNumber.of(8));
+        stream.dict.delete(PDFName.of('DecodeParms'));
+        return true;
+      }
+      return false;
+    }
+
+    // 2. FlateDecode (Uncompressed / deflated bitmap like PNG or raw scanner raster)
+    if (filter.includes('FlateDecode') && width > 0 && height > 0) {
+      const decoded = decodePDFRawStream(stream);
+      const rawBytes = (decoded as any).getBytes ? (decoded as any).getBytes() : null;
+      if (!rawBytes || rawBytes.length === 0) return false;
+
+      let canvas: HTMLCanvasElement | null = null;
+
+      if (colorSpace.includes('DeviceRGB') && rawBytes.length >= width * height * 3) {
+        canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const imgData = ctx.createImageData(width, height);
+          let s = 0;
+          let d = 0;
+          const totalPixels = width * height;
+          for (let p = 0; p < totalPixels; p++) {
+            imgData.data[d] = rawBytes[s];
+            imgData.data[d + 1] = rawBytes[s + 1];
+            imgData.data[d + 2] = rawBytes[s + 2];
+            imgData.data[d + 3] = 255;
+            s += 3;
+            d += 4;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }
+      } else if (colorSpace.includes('DeviceGray') && rawBytes.length >= width * height) {
+        canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const imgData = ctx.createImageData(width, height);
+          let s = 0;
+          let d = 0;
+          const totalPixels = width * height;
+          for (let p = 0; p < totalPixels; p++) {
+            const g = rawBytes[s++];
+            imgData.data[d++] = g;
+            imgData.data[d++] = g;
+            imgData.data[d++] = g;
+            imgData.data[d++] = 255;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        }
+      }
+
+      if (canvas) {
+        const scale = Math.min(1, maxDimension / Math.max(width, height));
+        const targetW = Math.max(1, Math.round(width * scale));
+        const targetH = Math.max(1, Math.round(height * scale));
+
+        let finalCanvas = canvas;
+        if (scale < 1) {
+          const scaledCanvas = document.createElement('canvas');
+          scaledCanvas.width = targetW;
+          scaledCanvas.height = targetH;
+          const sCtx = scaledCanvas.getContext('2d');
+          if (sCtx) {
+            sCtx.fillStyle = '#FFFFFF';
+            sCtx.fillRect(0, 0, targetW, targetH);
+            sCtx.drawImage(canvas, 0, 0, targetW, targetH);
+            finalCanvas = scaledCanvas;
+          }
+        }
+
+        const compressedBlob = await new Promise<Blob | null>((resolve) =>
+          finalCanvas.toBlob(resolve, 'image/jpeg', quality)
+        );
+        if (compressedBlob) {
+          const newBuffer = await compressedBlob.arrayBuffer();
+          const newBytes = new Uint8Array(newBuffer);
+          if (newBytes.length < stream.contents.length) {
+            (stream as any).contents = newBytes;
+            stream.dict.set(PDFName.of('Length'), PDFNumber.of(newBytes.length));
+            stream.dict.set(PDFName.of('Width'), PDFNumber.of(targetW));
+            stream.dict.set(PDFName.of('Height'), PDFNumber.of(targetH));
+            stream.dict.set(PDFName.of('Filter'), PDFName.of('DCTDecode'));
+            stream.dict.set(PDFName.of('ColorSpace'), PDFName.of('DeviceRGB'));
+            stream.dict.set(PDFName.of('BitsPerComponent'), PDFNumber.of(8));
+            stream.dict.delete(PDFName.of('DecodeParms'));
+            return true;
+          }
+        }
+      }
+    }
+  } catch {
+    // Graceful fallback: maintain existing stream untouched
+  }
+  return false;
+}
+
+/**
+ * Compress PDF with genuine stream recompression, image downscaling, and object stream optimization
  */
 export async function compressPdf(
   file: File,
   preset: 'extreme' | 'recommended' | 'low' = 'recommended',
   onProgress?: ProcessProgressCallback
 ): Promise<{ blob: Blob; originalSize: number; newSize: number; savedPercentage: number }> {
-  onProgress?.(15, 'Analyzing document objects & streams...');
+  onProgress?.(10, 'Loading and parsing PDF structure...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const srcPdf = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const srcPdf = await safeLoadPdfDocument(arrayBuffer, file.name, {
+    updateMetadata: false,
+  });
 
-  onProgress?.(45, 'Optimizing font tables, removing unused objects...');
-  // Clean metadata & optimize
-  srcPdf.setTitle(srcPdf.getTitle() || file.name.replace(/\.pdf$/i, ''));
-  srcPdf.setProducer('DocuPulse SaaS PDF Optimizer v2.5');
-  srcPdf.setCreator('DocuPulse Pro');
-  srcPdf.setCreationDate(new Date());
+  // Presets mapping for downsampling and quality
+  const settings = {
+    extreme: { maxDimension: 1024, quality: 0.48 },
+    recommended: { maxDimension: 1600, quality: 0.68 },
+    low: { maxDimension: 2200, quality: 0.82 },
+  }[preset] || { maxDimension: 1600, quality: 0.68 };
 
-  onProgress?.(75, 'Applying stream compression...');
+  onProgress?.(25, 'Scanning embedded raster images and object streams...');
+
+  // Locate all indirect raster image streams
+  const imageStreams: {
+    stream: PDFRawStream;
+    filter: string;
+    width: number;
+    height: number;
+    colorSpace: string;
+  }[] = [];
+
+  for (const [, obj] of srcPdf.context.enumerateIndirectObjects()) {
+    if (obj instanceof PDFRawStream && obj.dict) {
+      const subtype = obj.dict.get(PDFName.of('Subtype'))?.toString();
+      if (subtype === '/Image') {
+        const filterObj = obj.dict.get(PDFName.of('Filter'));
+        const filter = filterObj ? filterObj.toString() : '';
+        const wObj = obj.dict.get(PDFName.of('Width'));
+        const hObj = obj.dict.get(PDFName.of('Height'));
+        const csObj = obj.dict.get(PDFName.of('ColorSpace'));
+
+        const width =
+          wObj && typeof (wObj as any).asNumber === 'function'
+            ? (wObj as any).asNumber()
+            : parseInt(wObj?.toString() || '0', 10);
+        const height =
+          hObj && typeof (hObj as any).asNumber === 'function'
+            ? (hObj as any).asNumber()
+            : parseInt(hObj?.toString() || '0', 10);
+        const colorSpace = csObj ? csObj.toString() : '/DeviceRGB';
+
+        imageStreams.push({
+          stream: obj,
+          filter,
+          width,
+          height,
+          colorSpace,
+        });
+      }
+    }
+  }
+
+  // Optimize embedded images if any exist
+  if (imageStreams.length > 0) {
+    for (let i = 0; i < imageStreams.length; i++) {
+      const item = imageStreams[i];
+      const percent = Math.round(30 + ((i + 1) / imageStreams.length) * 45);
+      onProgress?.(percent, `Compressing raster image ${i + 1} of ${imageStreams.length}...`);
+      await recompressRasterImage(
+        item.stream,
+        item.filter,
+        item.width,
+        item.height,
+        item.colorSpace,
+        settings.maxDimension,
+        settings.quality
+      );
+    }
+  }
+
+  onProgress?.(80, 'Stripping redundant XML metadata & structural trees...');
+  try {
+    // Strip large unneeded XML metadata packets
+    srcPdf.catalog.delete(PDFName.of('Metadata'));
+    srcPdf.catalog.delete(PDFName.of('PieceInfo'));
+
+    // Strip page thumbnails and application private artboards
+    const pages = srcPdf.getPages();
+    for (const page of pages) {
+      page.node.delete(PDFName.of('Thumb'));
+      page.node.delete(PDFName.of('PieceInfo'));
+    }
+  } catch {
+    // Ignore harmless catalog property exceptions
+  }
+
+  onProgress?.(90, 'Packaging cross-reference tables with object stream compression...');
   const compressedBytes = await srcPdf.save({
     useObjectStreams: true,
     addDefaultPage: false,
     updateFieldAppearances: false,
   });
 
-  let finalBlob = new Blob([compressedBytes], { type: 'application/pdf' });
+  const originalSize = file.size;
+  const newSize = compressedBytes.byteLength;
 
-  // Calculate realistic compression ratio
-  const ratioFactor = preset === 'extreme' ? 0.45 : preset === 'recommended' ? 0.65 : 0.85;
-  let simulatedSavingsBytes = Math.round(file.size * (1 - ratioFactor));
-  if (simulatedSavingsBytes <= 0) {
-    simulatedSavingsBytes = Math.round(file.size * 0.2);
+  // Zero Synthetic Data & Fidelity: If the optimized document is actually smaller, return it
+  if (newSize < originalSize) {
+    const savedBytes = originalSize - newSize;
+    const savedPercentage = Math.round((savedBytes / originalSize) * 100);
+    const finalBlob = new Blob([compressedBytes], { type: 'application/pdf' });
+
+    onProgress?.(
+      100,
+      `Compression completed! Saved ${savedPercentage}% (${(savedBytes / 1024 / 1024).toFixed(2)} MB)`
+    );
+    return {
+      blob: finalBlob,
+      originalSize,
+      newSize,
+      savedPercentage,
+    };
   }
 
-  let finalSize = file.size - simulatedSavingsBytes;
-  if (finalSize < finalBlob.size) {
-    finalSize = Math.max(Math.round(file.size * 0.5), finalBlob.size);
-  }
-
-  const savedPercentage = Math.max(12, Math.round(((file.size - finalBlob.size) / file.size) * 100));
-
-  onProgress?.(100, 'Compression completed!');
+  // If the document was already maximally compressed (e.g., highly compressed text-only PDF),
+  // NEVER return an artificially larger file. Return the original file with 0% saved.
+  onProgress?.(100, 'Document analyzed: already maximally optimized.');
   return {
-    blob: finalBlob,
-    originalSize: file.size,
-    newSize: finalBlob.size,
-    savedPercentage: savedPercentage > 0 ? savedPercentage : (preset === 'extreme' ? 68 : preset === 'recommended' ? 48 : 28),
+    blob: file,
+    originalSize,
+    newSize: originalSize,
+    savedPercentage: 0,
   };
 }
 
@@ -281,7 +643,7 @@ export async function pdfToImages(
 ): Promise<{ images: { pageNum: number; dataUrl: string; blob: Blob }[]; zipBlob?: Blob }> {
   onProgress?.(15, 'Loading PDF document...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
   const totalPages = pdfDoc.getPageCount();
 
   const generatedImages: { pageNum: number; dataUrl: string; blob: Blob }[] = [];
@@ -366,7 +728,7 @@ export async function pdfToWord(
 ): Promise<{ blob: Blob; fileName: string; wordCount: number }> {
   onProgress?.(20, 'Extracting text streams and document typography...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
   const totalPages = pdfDoc.getPageCount();
 
   onProgress?.(50, `Analyzing ${totalPages} pages for headings, tables, and paragraphs...`);
@@ -547,7 +909,7 @@ export async function watermarkPdf(
 ): Promise<{ blob: Blob; fileName: string; pageCount: number }> {
   onProgress?.(15, 'Loading PDF document...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
   const pages = pdfDoc.getPages();
   const font = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
 
@@ -612,7 +974,7 @@ export async function addPageNumbers(
 ): Promise<{ blob: Blob; fileName: string; pageCount: number }> {
   onProgress?.(15, 'Loading PDF document...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
   const pages = pdfDoc.getPages();
   const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
 
@@ -673,7 +1035,7 @@ export async function rotatePdfPages(
 ): Promise<{ blob: Blob; fileName: string }> {
   onProgress?.(20, 'Loading PDF...');
   const arrayBuffer = await fileToArrayBuffer(file);
-  const pdfDoc = await PDFDocument.load(arrayBuffer, { ignoreEncryption: true });
+  const pdfDoc = await safeLoadPdfDocument(arrayBuffer, file.name);
   const pages = pdfDoc.getPages();
 
   onProgress?.(50, `Rotating ${pages.length} pages by ${degreesToRotate}°...`);

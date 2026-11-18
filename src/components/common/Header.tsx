@@ -34,6 +34,7 @@ import {
   Check,
   FileSpreadsheet,
   Presentation,
+  FileCode,
 } from 'lucide-react';
 
 const ICON_MAP: Record<string, React.ReactNode> = {
@@ -51,6 +52,7 @@ const ICON_MAP: Record<string, React.ReactNode> = {
   RotateCw: <RotateCw className="w-4 h-4 text-orange-500" />,
   FileSpreadsheet: <FileSpreadsheet className="w-4 h-4 text-emerald-600" />,
   Presentation: <Presentation className="w-4 h-4 text-orange-500" />,
+  FileCode: <FileCode className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />,
 };
 
 export const Header: React.FC = () => {

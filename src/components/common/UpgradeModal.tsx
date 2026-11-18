@@ -1,6 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
-import { UserPlan } from '../../types';
 import {
   X,
   CheckCircle2,
@@ -13,8 +12,22 @@ import {
   Zap,
   Clock,
   Infinity as InfinityIcon,
-  Check,
+  Smartphone,
+  Globe2,
+  ExternalLink,
+  AlertCircle,
 } from 'lucide-react';
+
+interface BillingConfigResponse {
+  activeProviderId: string;
+  activeProviderName: string;
+  supportedProviders: Array<{
+    id: string;
+    name: string;
+    description: string;
+    configured: boolean;
+  }>;
+}
 
 export const UpgradeModal: React.FC = () => {
   const {
@@ -24,7 +37,6 @@ export const UpgradeModal: React.FC = () => {
     setSelectedUpgradePlan,
     upgradeSubscription,
     user,
-    quota,
     t,
   } = useApp();
 
@@ -33,12 +45,27 @@ export const UpgradeModal: React.FC = () => {
   const [appliedDiscount, setAppliedDiscount] = useState<number>(0);
   const [promoMessage, setPromoMessage] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState<string>('stripe');
+  const [billingConfig, setBillingConfig] = useState<BillingConfigResponse | null>(null);
 
-  // Form states
-  const [cardNumber, setCardNumber] = useState('');
-  const [cardExpiry, setCardExpiry] = useState('');
-  const [cardCvc, setCardCvc] = useState('');
-  const [cardName, setCardName] = useState(user.name || '');
+  useEffect(() => {
+    if (isUpgradeModalOpen) {
+      fetch('/api/billing/config')
+        .then((res) => res.json())
+        .then((data: BillingConfigResponse) => {
+          setBillingConfig(data);
+          if (data.activeProviderId && data.activeProviderId !== 'sandbox') {
+            setSelectedProvider(data.activeProviderId);
+          } else {
+            setSelectedProvider('lemonsqueezy'); // Default recommendation for global/Africa
+          }
+        })
+        .catch(() => {
+          // Fallback
+          setSelectedProvider('stripe');
+        });
+    }
+  }, [isUpgradeModalOpen]);
 
   if (!isUpgradeModalOpen) return null;
 
@@ -67,14 +94,14 @@ export const UpgradeModal: React.FC = () => {
   const discountAmount = rawTotal * appliedDiscount;
   const finalTotal = Math.max(0, rawTotal - discountAmount);
 
-  const handleSubmitPayment = (e: React.FormEvent) => {
+  const handleSubmitPayment = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsProcessing(true);
-
-    setTimeout(() => {
-      upgradeSubscription(selectedUpgradePlan, billingCycle);
+    try {
+      await upgradeSubscription(selectedUpgradePlan, billingCycle, selectedProvider);
+    } finally {
       setIsProcessing(false);
-    }, 900);
+    }
   };
 
   return (
@@ -84,6 +111,7 @@ export const UpgradeModal: React.FC = () => {
         <button
           onClick={() => setIsUpgradeModalOpen(false)}
           className="absolute top-4 right-4 z-10 p-2 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-500 hover:text-slate-900 dark:hover:text-white cursor-pointer transition-colors"
+          aria-label="Close modal"
         >
           <X className="w-4 h-4" />
         </button>
@@ -138,33 +166,34 @@ export const UpgradeModal: React.FC = () => {
                 { text: t('upgrade_feat_4'), icon: <Sparkles className="w-4 h-4 text-pink-400" /> },
                 { text: t('upgrade_feat_5'), icon: <Clock className="w-4 h-4 text-cyan-400" /> },
                 { text: t('upgrade_feat_6'), icon: <ShieldCheck className="w-4 h-4 text-emerald-400" /> },
-              ].map((feat, idx) => (
-                <div key={idx} className="flex items-center gap-2.5 text-xs text-slate-200">
-                  <div className="shrink-0">{feat.icon}</div>
+              ].map((feat, i) => (
+                <div key={i} className="flex items-center gap-2.5 text-xs text-slate-200">
+                  <div className="p-1 rounded-md bg-white/10 shrink-0">{feat.icon}</div>
                   <span>{feat.text}</span>
                 </div>
               ))}
             </div>
           </div>
 
-          <div className="mt-6 pt-4 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <Lock className="w-3.5 h-3.5 text-slate-400" />
-              <span>{t('upgrade_ssl_guarantee')}</span>
-            </div>
-            <span>{t('upgrade_cancel_anytime')}</span>
+          <div className="pt-6 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Garantie satisfait ou remboursé 14 jours</span>
+            </span>
+            <span>Résiliation en 1 clic</span>
           </div>
         </div>
 
-        {/* Right column: Checkout & Payment details */}
-        <div className="w-full md:w-1/2 p-6 sm:p-8 flex flex-col justify-between overflow-y-auto">
+        {/* Right column: Checkout & Decoupled Payment Method details */}
+        <div className="w-full md:w-1/2 p-6 sm:p-8 bg-white dark:bg-slate-900 flex flex-col justify-between overflow-y-auto">
           <div>
-            {/* Billing Toggle (Monthly / Annual) */}
-            <div className="flex items-center justify-between mb-5">
-              <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                {t('upgrade_billing_cycle')}
+            <div className="flex items-center justify-between mb-4">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                {t('upgrade_summary')}
               </span>
-              <div className="inline-flex items-center bg-slate-100 dark:bg-slate-800 p-1 rounded-xl">
+
+              {/* Billing Cycle Switch */}
+              <div className="inline-flex p-1 bg-slate-100 dark:bg-slate-800 rounded-xl">
                 <button
                   type="button"
                   onClick={() => setBillingCycle('monthly')}
@@ -201,7 +230,7 @@ export const UpgradeModal: React.FC = () => {
                     ${finalTotal.toFixed(2)}
                   </span>
                   <span className="text-xs text-slate-500 dark:text-slate-400 ml-1.5">
-                    {billingCycle === 'annual' ? '/ year ($7.00/mo billed annually)' : '/ month'}
+                    {billingCycle === 'annual' ? '/ an ($7.00/mois facturé annuellement)' : '/ mois'}
                   </span>
                 </div>
                 {appliedDiscount > 0 && (
@@ -242,84 +271,159 @@ export const UpgradeModal: React.FC = () => {
               )}
             </form>
 
-            {/* Simulated Payment Form */}
-            <form onSubmit={handleSubmitPayment} className="space-y-3">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  {t('upgrade_cardholder')}
-                </label>
-                <input
-                  type="text"
-                  value={cardName}
-                  onChange={(e) => setCardName(e.target.value)}
-                  required
-                  className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-indigo-500"
-                />
-              </div>
+            {/* Decoupled Payment Method Selector (Prompt 5) */}
+            <div className="mb-5">
+              <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-2">
+                Moyen de paiement sécurisé
+              </label>
 
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                  {t('upgrade_card_number')}
-                </label>
-                <div className="relative">
-                  <CreditCard className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
-                  <input
-                    type="text"
-                    value={cardNumber}
-                    onChange={(e) => setCardNumber(e.target.value)}
-                    required
-                    className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs font-mono text-slate-900 dark:text-white focus:outline-indigo-500"
-                  />
-                </div>
-              </div>
+              <div className="space-y-2">
+                {/* 1. Lemon Squeezy (Merchant of Record / Global & Africa) */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider('lemonsqueezy')}
+                  className={`w-full p-3 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
+                    selectedProvider === 'lemonsqueezy'
+                      ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-100 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Globe2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Lemon Squeezy (International & PayPal)
+                        </span>
+                        <span className="text-[10px] bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 font-extrabold px-1.5 py-0.2 rounded-full">
+                          Recommandé
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        Revendeur officiel mondial : accepte CB & PayPal, gère la TVA, reversement Payoneer/Wise (compatible Guinée / Afrique).
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                    selectedProvider === 'lemonsqueezy' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                  }`}>
+                    {selectedProvider === 'lemonsqueezy' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
 
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                    {t('upgrade_expiration')}
-                  </label>
-                  <input
-                    type="text"
-                    value={cardExpiry}
-                    onChange={(e) => setCardExpiry(e.target.value)}
-                    required
-                    placeholder="MM/YY"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[11px] font-bold text-slate-600 dark:text-slate-400 uppercase tracking-wider mb-1">
-                    {t('upgrade_cvc')}
-                  </label>
-                  <input
-                    type="text"
-                    value={cardCvc}
-                    onChange={(e) => setCardCvc(e.target.value)}
-                    required
-                    placeholder="CVC"
-                    className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-xs text-slate-900 dark:text-white focus:outline-indigo-500"
-                  />
-                </div>
-              </div>
+                {/* 2. Stripe (Cartes Bancaires Internationales) */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider('stripe')}
+                  className={`w-full p-3 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
+                    selectedProvider === 'stripe'
+                      ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-100 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <CreditCard className="w-4 h-4 text-indigo-600 dark:text-indigo-400 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Carte Bancaire (Stripe)
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        Cartes internationales Visa, Mastercard, American Express, Apple Pay, Google Pay.
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                    selectedProvider === 'stripe' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                  }`}>
+                    {selectedProvider === 'stripe' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
 
+                {/* 3. Mobile Money (Orange Money Guinée / MTN) */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider('cinetpay')}
+                  className={`w-full p-3 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
+                    selectedProvider === 'cinetpay'
+                      ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-100 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Smartphone className="w-4 h-4 text-amber-500 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Mobile Money (Orange Money Guinée / MTN)
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        Paiement direct en Franc Guinéen (GNF) via Orange Money, MTN Mobile Money et Wave.
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                    selectedProvider === 'cinetpay' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                  }`}>
+                    {selectedProvider === 'cinetpay' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
+
+                {/* 4. Sandbox Test Mode (Dev & Evaluation) */}
+                <button
+                  type="button"
+                  onClick={() => setSelectedProvider('sandbox')}
+                  className={`w-full p-3 rounded-2xl border text-left flex items-start justify-between transition-all cursor-pointer ${
+                    selectedProvider === 'sandbox'
+                      ? 'border-indigo-600 bg-indigo-50/50 dark:bg-indigo-950/30 text-indigo-950 dark:text-indigo-100 shadow-xs'
+                      : 'border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-start gap-2.5">
+                    <Sparkles className="w-4 h-4 text-violet-500 mt-0.5 shrink-0" />
+                    <div>
+                      <span className="text-xs font-bold text-slate-900 dark:text-white">
+                        Mode Test / Sandbox (Développement & Évaluation)
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        Valide l'activation instantanée du forfait avec session serveur sans carte réelle requise.
+                      </p>
+                    </div>
+                  </div>
+                  <div className={`w-4 h-4 rounded-full border flex items-center justify-center shrink-0 mt-0.5 ${
+                    selectedProvider === 'sandbox' ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-slate-300'
+                  }`}>
+                    {selectedProvider === 'sandbox' && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Submit Action */}
+            <form onSubmit={handleSubmitPayment}>
               <button
                 type="submit"
                 disabled={isProcessing}
-                className="w-full mt-4 py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-extrabold text-xs shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-indigo-600 via-indigo-700 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-extrabold text-xs shadow-lg shadow-indigo-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
               >
                 {isProcessing ? (
                   <>
                     <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                    <span>{t('upgrade_processing')}</span>
+                    <span>Connexion à la passerelle de paiement...</span>
                   </>
                 ) : (
                   <>
                     <Lock className="w-3.5 h-3.5" />
-                    <span>{t('upgrade_pay_btn', { total: finalTotal.toFixed(2) })}</span>
+                    <span>Payer ${finalTotal.toFixed(2)} et Activer l'Abonnement</span>
                   </>
                 )}
               </button>
             </form>
+
+            <div className="mt-3 text-center">
+              <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+                <Lock className="w-3 h-3 text-emerald-500" />
+                <span>Paiement crypté SSL 256-bit — Détection et annulation en 1 clic</span>
+              </span>
+            </div>
           </div>
         </div>
       </div>

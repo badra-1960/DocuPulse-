@@ -3,12 +3,25 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Docupulse</title>
-    <meta name="description" content="An application built with Google AI Studio." />
-    <meta property="og:title" content="My Google AI Studio App" />
-    <meta property="og:description" content="An application built with Google AI Studio." />
+    <title>DocuPulse - All-in-One PDF &amp; Image SaaS Platform</title>
+    <meta name="description" content="Professional SaaS suite for PDF and image conversion, compression, merging, splitting, OCR, and document workflows with usage quotas, subscriptions, user dashboard, and admin panel." />
+    <meta property="og:title" content="DocuPulse - All-in-One PDF &amp; Image SaaS Platform" />
+    <meta property="og:description" content="Professional SaaS suite for PDF and image conversion, compression, merging, splitting, OCR, and document workflows with usage quotas, subscriptions, user dashboard, and admin panel." />
     <meta property="og:type" content="website" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script>
+      // Gracefully silence HMR WebSocket connection errors in sandbox iframe environment
+      window.addEventListener('error', function(e) {
+        if (e.message && (e.message.includes('WebSocket') || e.message.includes('vite') || e.filename && e.filename.includes('@vite/client'))) {
+          e.stopImmediatePropagation();
+        }
+      });
+      window.addEventListener('unhandledrejection', function(e) {
+        if (e.reason && (String(e.reason).includes('WebSocket') || String(e.reason).includes('vite'))) {
+          e.stopImmediatePropagation();
+        }
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -15,8 +15,8 @@ import confetti from 'canvas-confetti';
 
 interface AppContextType {
   // Navigation & Views
-  currentView: 'home' | 'tool' | 'dashboard' | 'pricing' | 'admin';
-  setCurrentView: (view: 'home' | 'tool' | 'dashboard' | 'pricing' | 'admin') => void;
+  currentView: 'home' | 'tool' | 'dashboard' | 'pricing' | 'admin' | 'legal';
+  setCurrentView: (view: 'home' | 'tool' | 'dashboard' | 'pricing' | 'admin' | 'legal') => void;
   activeToolId: ToolId | null;
   openTool: (toolId: ToolId) => void;
   searchQuery: string;
@@ -59,8 +59,7 @@ interface AppContextType {
   isUpgradeModalOpen: boolean;
   setIsUpgradeModalOpen: (open: boolean) => void;
   selectedUpgradePlan: UserPlan;
-  setSelectedUpgradePlan: (plan: UserPlan) => void;
-  upgradeSubscription: (plan: UserPlan, billingCycle?: 'monthly' | 'annual') => void;
+  upgradeSubscription: (plan: UserPlan, billingCycle?: 'monthly' | 'annual', provider?: string) => Promise<void>;
   cancelSubscription: () => void;
   invoices: Invoice[];
 
@@ -151,7 +150,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Navigation
-  const [currentView, setCurrentView] = useState<'home' | 'tool' | 'dashboard' | 'pricing' | 'admin'>('home');
+  const [currentView, setCurrentView] = useState<'home' | 'tool' | 'dashboard' | 'pricing' | 'admin' | 'legal'>('home');
   const [activeToolId, setActiveToolId] = useState<ToolId | null>(null);
   const [searchQuery, setSearchQuery] = useState<string>('');
 
@@ -367,6 +366,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               limitToday: data.dailyLimit,
               date: new Date().toISOString().split('T')[0],
             }));
+
+            // Sync authoritative plan & grace period status
+            setUser((prev) => {
+              if (prev.plan !== data.plan || prev.inGracePeriod !== data.inGracePeriod) {
+                return {
+                  ...prev,
+                  plan: data.plan,
+                  inGracePeriod: Boolean(data.inGracePeriod),
+                  gracePeriodRemainingHours: data.gracePeriodRemainingHours || 0,
+                  subscriptionEndDate: data.subscriptionEndDate || prev.subscriptionEndDate,
+                };
+              }
+              return prev;
+            });
           }
         }
       } catch (err) {
@@ -485,7 +498,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Upgrade subscription flow
-  const upgradeSubscription = async (plan: UserPlan, billingCycle: 'monthly' | 'annual' = 'monthly') => {
+  const upgradeSubscription = async (plan: UserPlan, billingCycle: 'monthly' | 'annual' = 'monthly', provider?: string) => {
     const planName = plan === 'pro' ? 'DocuPulse Pro' : 'Enterprise & Teams';
     const amount = plan === 'pro' ? (billingCycle === 'annual' ? 84.0 : 9.0) : (billingCycle === 'annual' ? 228.0 : 24.0);
 
@@ -497,10 +510,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'Content-Type': 'application/json',
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ plan, billingInterval: billingCycle }),
+        body: JSON.stringify({ plan, billingInterval: billingCycle, provider }),
       });
 
       const data = await res.json();
+
+      if (!res.ok) {
+        showToast('error', 'Erreur Passerelle de Paiement', data.details || data.error || 'Impossible d\'initialiser le paiement.');
+        return;
+      }
 
       if (data.checkoutUrl) {
         window.location.href = data.checkoutUrl;
